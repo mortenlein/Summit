@@ -7,9 +7,9 @@
   "roster_locked": "Endringer i lagene er låst. Lås opp lagredigering i turneringsinnstillingene først.",
   "roster_locked_force": "Endringer i lagene er låst. Lås opp lagredigering i turneringsinnstillingene, eller bekreft en tvungen fjerning for å ta laget ut av kampene sine.",
   "roster_locked_identity": "Endringer i lagene er låst. Plass, navn, kallenavn og flagg kan fortsatt endres; Steam-ID og lagleder krever at lagredigering låses opp.",
-  "seeding_locked": "Seeding er låst mens kampoppsettet er i gang. Navn og logo kan fortsatt endres.",
-  "bracket_locked": "Endringer i kampoppsettet er låst. Lås opp lagredigering i turneringsinnstillingene før du lager kampene på nytt.",
-  "player_move_locked": "Kampoppsettet er live — be en arrangør om å flytte deg.",
+  "seeding_locked": "Seeding er låst mens bracketen er i gang. Navn og logo kan fortsatt endres.",
+  "bracket_locked": "Endringer i bracketen er låst. Lås opp lagredigering i turneringsinnstillingene før du lager kampene på nytt.",
+  "player_move_locked": "Bracketen er live — be en arrangør om å flytte deg.",
   "signups_disabled": "Påmelding med Steam er skrudd av for denne turneringen",
   "registration_locked": "Påmeldingen er stengt for denne turneringen akkurat nå",
   "team_name_required": "Du må gi laget et navn",
@@ -23,6 +23,6 @@
   "forfeit_needs_both_teams": "Begge lag må være satt opp for å registrere walkover",
   "forfeit_side_invalid": "forfeit må være HOME eller AWAY",
   "best_of_too_low": "bestOf må være minst 1",
-  "downstream_started": "Kamp {matchRef} lenger ute i kampoppsettet har allerede startet — nullstill den først.",
+  "downstream_started": "Kamp {matchRef} lenger ute i bracketen har allerede startet — nullstill den først.",
   "both_teams_required": "Begge lag må være satt opp før kampen kan kalles opp"
 }

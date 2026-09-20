@@ -5,7 +5,7 @@
   },
   "tabs": {
     "overview": "Oversikt",
-    "bracket": "Kampoppsett",
+    "bracket": "Bracket",
     "leaderboard": "Tabell",
     "teams": "Lag",
     "players": "Spillere",
@@ -32,7 +32,7 @@
   },
   "bracket": {
     "panHint": "Dra for å flytte, knip for å zoome. Trykk på en kamp for detaljer.",
-    "open": "Åpne kampoppsettet"
+    "open": "Åpne bracketen"
   },
   "leaderboard": {
     "title": "Tabell",
@@ -57,7 +57,7 @@
     "noTeams": "Ingen lag har meldt seg på ennå.",
     "won": "Ferdig — {team} vant turneringen",
     "progress": "{stage} · {played} av {total} spilt",
-    "notGenerated": "Kampoppsettet er ikke laget ennå.",
+    "notGenerated": "Bracketen er ikke laget ennå.",
     "allPlayed": "Alle kampene er spilt."
   },
   "team": {
@@ -82,7 +82,7 @@
   "match": {
     "detailsAria": "Kampdetaljer",
     "noStats": "Det er ikke lagret statistikk per runde for denne kampen.",
-    "none": "Ingen kamper ennå — kampoppsettet er ikke laget."
+    "none": "Ingen kamper ennå — bracketen er ikke laget."
   },
   "registry": {
     "counts": "<n>{teams}</n> påmeldt · <n>{players}</n> spillere",
@@ -94,7 +94,7 @@
     "noMatch": "Ingen treff på «{search}»."
   },
   "overlay": {
-    "loading": "Laster kampoppsett …",
+    "loading": "Laster bracket …",
     "noData": "Ingen kampdata for denne turneringen",
     "bestOf": "BEST AV {count}",
     "grandFinals": "Finale",

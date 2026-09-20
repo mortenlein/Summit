@@ -7,8 +7,8 @@ Register: **uformelt bokmål, du-form**, for spillere fra 12 år. Not `De`, not 
 Norwegian gaming loanwords are kept where that is genuinely what people say — writing
 `nettverkssamling` instead of `LAN` would be worse Norwegian, not better.
 
-> **⚠ Please correct anything below before I translate the app.** The rows marked **[VELG]**
-> are real choices where I can argue both ways and you know your players.
+> The open questions were settled by the owner on 2026-09-20: **bracket** (not *kampoppsett*)
+> and **crew** (not *vakt*). Both are marked ✅ below with the grammar they carry.
 
 ---
 
@@ -32,26 +32,20 @@ Norwegian gaming loanwords are kept where that is genuinely what people say — 
 | Result | **resultat** | |
 | Standings | **tabell** | |
 
-### [VELG] Bracket
+### Bracket → **bracket** ✅ decided 2026-09-20
 
-| Option | Argument |
-|---|---|
-| **bracket** | what Norwegian esports players actually say out loud |
-| **kampoppsett** | plain Norwegian, understood by parents and 12-year-olds alike |
-| **turneringstre** | the formal term; nobody says it |
+The loanword, everywhere, because it is what Norwegian esports players actually say out loud.
+Not *kampoppsett*, not *turneringstre*.
 
-*My lean: **kampoppsett** in headings where a parent may read it, **bracket** in player-facing
-copy. But one word everywhere is simpler — your call.*
+**It inflects as masculine**: `en bracket` → `bracketen` (definite) → `brackets` (plural).
+This matters: *kampoppsett* was **neuter**, so the swap left four strings with the old gender
+(*et bracket*, *et nytt bracket*, *Bracketen er klart*, *lag det*). If the term ever changes
+again, re-check every adjective, article and pronoun around it — not just the noun.
 
-### [VELG] Marshal (the floor staff who fetch players)
+### Marshal (the floor staff who fetch players) → **crew** ✅ decided 2026-09-20
 
-| Option | Argument |
-|---|---|
-| **crew** | what youth LANs in Norway actually call this role |
-| **vakt** | closer to the duty; matches your own `-vakt` script naming |
-| **funksjonær** | correct but reads like athletics officialdom |
-
-*My lean: **crew**.*
+What youth LANs in Norway actually call this role. Not *vakt*, not *funksjonær*.
+Inflects as neuter: `crewet` (definite). The board is the **crew-tavla**.
 
 ---
 

@@ -16,7 +16,7 @@
     "resultDescription": "**{home}** {homeScore}:{awayScore} **{away}** · {tournament} · Offisielt resultat",
     "signupTitle": "Spiller påmeldt",
     "signupDescription": "Påmelding bekreftet for **{tournament}**",
-    "bracketLiveTitle": "Kampoppsettet er live",
+    "bracketLiveTitle": "Bracketen er live",
     "bracketLiveDescription": "**{tournament}** — {matches} kamper satt opp for {teams} lag.",
     "fieldHome": "Hjemme",
     "fieldAway": "Borte",

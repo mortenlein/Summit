@@ -42,7 +42,7 @@
   },
   "action": {
     "oneClickJoin": "Koble til serveren",
-    "viewBracket": "Se kampoppsettet",
+    "viewBracket": "Se bracketen",
     "openTournament": "Åpne turneringen",
     "browseTournaments": "Se turneringene",
     "browseAll": "Se alle"
@@ -57,9 +57,9 @@
   },
   "standby": {
     "knockedOutTitle": "Slått ut",
-    "waitingTitle": "Venter på kampoppsettet",
+    "waitingTitle": "Venter på bracketen",
     "outOfNamed": "Laget ditt er ute av <name>{tournament}</name>. Resten av turneringen spilles videre.",
-    "outOfUnnamed": "Laget ditt er ute av kampoppsettet. Resten spilles videre.",
+    "outOfUnnamed": "Laget ditt er ute av bracketen. Resten spilles videre.",
     "notDrawnNamed": "<name>{tournament}</name> er ikke trukket ennå. Kampen din, plassen din og køplassen din dukker opp her så snart trekningen er gjort.",
     "notDrawnNone": "Ingen av turneringene dine er trukket ennå. Kampen din, plassen din og køplassen din dukker opp her så snart trekningen er gjort."
   },

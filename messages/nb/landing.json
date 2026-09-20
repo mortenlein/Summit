@@ -1,6 +1,6 @@
 {
   "eyebrow": "CS2 LAN-turneringer",
-  "subtitle": "Kjør hele LAN-et fra påmelding til finale: Steam-påmelding, seedet kampoppsett, live kampkontroll og en OBS-overlay — én flate hele rommet kan følge.",
+  "subtitle": "Kjør hele LAN-et fra påmelding til finale: Steam-påmelding, seedet bracket, live kampkontroll og en OBS-overlay — én flate hele rommet kan følge.",
   "playingNow": "{count, plural, one {# kamp spilles akkurat nå} other {# kamper spilles akkurat nå}}",
   "nothingPlaying": "Ingen kamper spilles akkurat nå.",
   "ctaDashboard": "Min side",
