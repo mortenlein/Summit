@@ -21,7 +21,42 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV DATABASE_URL="file:./dev.db"
 RUN npm run build
 
-# Stage 3: Production runner
+# Stage 3: the gateway bot — its own tiny tree. No Next, no Prisma, no database, no ./data mount.
+#
+# NOTE ON ORDER: this stage sits BEFORE the runner on purpose. A Dockerfile's default build
+# target is its LAST stage, and `docker-compose.prod.yml` builds the app with a bare
+# `build: .` — put this at the bottom and `up -d --build summit` silently ships the bot as
+# the app. Keep `runner` last.
+#
+# Not `FROM builder` (that does COPY . . + `npm run build`, so fixing a Discord typo at 01:00
+# would rebuild Next on the box running the tournament) and not the runner image with a
+# different command (it contains no discord.js — nothing in src/ imports it, so Next's tracer
+# never traces it — so `command: node bot` would crashloop on first boot, discovered at the LAN).
+FROM node:22-alpine AS bot
+WORKDIR /app
+
+# So TZ=Europe/Oslo actually resolves; without tzdata alpine silently serves UTC.
+RUN apk add --no-cache tzdata
+ENV NODE_ENV=production
+ENV TZ=Europe/Oslo
+
+# bot/package.json holds discord.js and nothing else. Its optional native performance deps
+# (zlib-sync, erlpack, bufferutil, utf-8-validate) are deliberately NOT installed, which is
+# what removes the apk add python3/make/g++ build step entirely.
+COPY bot/package.json bot/package-lock.json ./
+RUN npm ci --omit=dev
+
+COPY bot/ ./
+
+# uid 1000 in node:22-alpine, matching the `user: "1000:1000"` the compose file pins.
+USER node
+
+# Health only (/healthz, /status). Not published; the app reads it over the compose network.
+EXPOSE 4002
+
+CMD ["node", "index.js"]
+
+# Stage 4: Production runner (MUST stay the last stage — see the note above)
 FROM node:22-alpine AS runner
 WORKDIR /app
 

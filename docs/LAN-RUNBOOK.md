@@ -36,6 +36,20 @@ Everything requires a Steam sign-in. There is no admin password — admin is an 
 `NEXTAUTH_URL` and `DATABASE_URL` are set for you by `docker-compose.prod.yml` — leave them.
 Full list with comments: `.env.example`.
 
+**The Discord bot has a second file: `.env.bot`** (same folder, also chmod 600). It is separate
+on purpose — the bot never gets to see `NEXTAUTH_SECRET` or `STEAM_API_KEY`.
+
+| Variable | In which file | Why it matters if wrong |
+|---|---|---|
+| `DISCORD_BOT_TOKEN` | **both** `.env` and `.env.bot` | The same token in both. The app uses it to post and DM; the bot uses it to log in and listen. |
+| `DISCORD_CLIENT_ID` | `.env.bot` | The Discord application id. Without it the bot cannot register `/koble` and `/stopp`. |
+| `DISCORD_GUILD_ID` | **both** | Which Discord server the commands live in. Also what makes the "Koble Discord" card appear on a player's profile. |
+| `SUMMIT_BOT_KEY` | **both**, same value | The password the bot uses to talk to the app. `openssl rand -hex 32`. If it is missing on the app side, linking fails closed (HTTP 503) rather than letting anyone in. |
+| `SUMMIT_API_URL` | `.env.bot` | `http://summit:4001`. The container-to-container address — **not** the turnering.mortenlab.xyz URL. |
+
+If `.env.bot` does not exist yet, the app still deploys normally; only the bot fails to start,
+and it says exactly which line is missing in `docker logs summit-bot`.
+
 ### 2. Deploy
 
 ```bash
@@ -54,6 +68,34 @@ docker logs --tail 50 summit            # migrations applied, then "ready"
 Then open https://turnering.mortenlab.xyz in a browser and sign in with Steam.
 
 Any change to `.env` needs `up -d` again (or `restart`) — the app reads env at boot.
+
+**There are two containers now: `summit` (the site) and `summit-bot` (the Discord bot).** The
+command above builds and starts both. To touch only one:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build summit       # the site only
+docker compose -f docker-compose.prod.yml up -d --build summit-bot   # the Discord bot only
+```
+
+Use the per-service form during the event. A change to `.env.bot` needs the `summit-bot` line;
+a change to `.env` needs the `summit` line.
+
+Check the bot came up:
+
+```bash
+docker ps --filter name=summit-bot                  # should be "Up" and "(healthy)"
+docker logs --tail 20 summit-bot | grep READY       # names the bot, the guild and the commands
+```
+
+The READY line looks like this, and is the one thing worth reading:
+
+```
+[bot] READY as Summit#1234 · guild 987654321098765432 · commands /koble /stopp (up-to-date) · app http://summit:4001
+```
+
+Note: `docker compose ... down` in the restore procedure further down now stops the bot as
+well. That is harmless — nothing about the tournament depends on it — and `up -d` brings it
+back.
 
 ### 3. Verify the backup ran
 
@@ -365,11 +407,71 @@ restart the container. If `NEXT_PUBLIC_STRATEGY_3_MOCK=true` is set, delivery is
 purpose and announcements only reach the in-app feed. Rejected posts are logged:
 `docker logs summit | grep -i discord`.
 
+**Is the Discord bot alive?**
+
+```bash
+docker ps --filter name=summit-bot            # want: Up ... (healthy)
+docker logs --tail 20 summit-bot              # want: a READY line naming the guild
+docker exec summit-bot wget -qO- http://127.0.0.1:4002/status   # the full picture, as JSON
+```
+
+`/status` tells you the state (`ready`, `reconnecting`, `starting`, `fatal`), which commands
+are registered, when a player last linked successfully, and the last error. It holds no
+passwords, so it is safe to paste into a chat when asking for help.
+
+**The bot is down / keeps restarting. What breaks?**
+
+**Only one thing: nobody can run `/koble`, so nobody new can link their Discord account.**
+Everything else is the site, not the bot — the bracket, calling matches, check-in, scoring,
+phone push, and the Discord *channel* announcements all keep working, and players who already
+linked keep getting their match DMs, because the site sends those. **Do not delay the
+tournament for this.** Fix it after the round, or after the LAN.
+
+```bash
+docker logs --tail 50 summit-bot     # the first error line says what is wrong, in plain words
+docker compose -f docker-compose.prod.yml restart summit-bot
+```
+
+The three usual causes, all named explicitly in the log: a missing line in `.env.bot`
+("Missing required environment variables: …"), a bad token ("Discord rejected the
+credentials"), or Discord being unreachable ("Gateway connect failed — retrying in 5s"). The
+bot waits 30 seconds before exiting on a fatal error on purpose — restarting faster would make
+Discord block the token for the rest of the day — so give it a minute before concluding it is
+stuck in a loop.
+
+**Nobody is getting DMs, but the channel posts fine.** That is a different system: the channel
+and the DMs are both sent by the *site*, not the bot. Check, in order: is `DISCORD_DM_ENABLED`
+set to `true` in `.env`; is **Pause Discord** switched on in Control for this tournament; and
+does the reach panel say those players are linked at all. A player showing *ikke koblet* never
+ran `/koble`; a player showing *blokkert* has direct messages from server members switched off
+in their own Discord settings (Discord error 50007) — the bot cannot get past that, and the
+crew fetches them in person. Which is what the crew does anyway.
+
+**Is Discord itself having a bad day?** Check https://discordstatus.com — that is the
+authoritative answer, and it takes ten seconds. From the box: `docker logs --tail 30
+summit-bot` showing repeated "Gateway connect failed" with a network error, or
+`docker exec summit-bot wget -qO- https://discord.com/api/v10/gateway` timing out, both point
+at Discord or at the box's internet rather than at Summit. If Discord is degraded, announce it
+on the floor and run the LAN on the crew and the marshal board. That path is tested and does
+not need Discord at all.
+
+**Rotate the Discord token** (do this if the token leaks, and after the LAN as routine):
+Discord Developer Portal → your application → Bot → **Reset Token**. Paste the new value into
+**both** `/home/mole/apps/Summit/.env` and `/home/mole/apps/Summit/.env.bot`, then:
+
+```bash
+cd /home/mole/apps/Summit
+docker compose -f docker-compose.prod.yml up -d summit summit-bot
+```
+
+Nothing is lost by rotating: no player has to re-link, and no DM history is affected.
+
 **Restart the app.**
 
 ```bash
 cd /home/mole/apps/Summit
 docker compose -f docker-compose.prod.yml restart summit    # plain restart
+docker compose -f docker-compose.prod.yml restart summit-bot   # just the Discord bot
 docker compose -f docker-compose.prod.yml up -d --build        # after a code or .env change
 ```
 
@@ -389,6 +491,7 @@ tar xzf data/backups/uploads-<ts>.tar.gz -C uploads/ # only if you need the logo
 
 ```bash
 docker logs -f summit                 # app: auth, webhooks, push, Discord, migrations
+docker logs -f summit-bot             # the Discord bot: linking only
 tail -f data/backups/backup.log         # backup cron
 ```
 

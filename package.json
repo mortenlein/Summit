@@ -14,7 +14,6 @@
     "test:bracket": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"node\"}' scripts/test-bracket-utils.ts",
     "test:cs2-webhook": "node scripts/test-cs2-webhook.js",
     "postinstall": "prisma generate",
-    "bot": "ts-node -r dotenv/config scripts/discord-bot.ts",
     "i18n:check": "node scripts/check-i18n.js"
   },
   "dependencies": {
