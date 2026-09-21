@@ -1,6 +1,6 @@
 // Visual audit of the PUBLIC spectator surfaces IN NORWEGIAN — not part of the suite (zz-
 // prefix, `testIgnore` in playwright.config.ts). Norwegian runs 20-40% longer than English
-// ("Bracket" → "Kampoppsett", "Settings" → "Innstillinger"), so every layout that was tuned to
+// ("Settings" → "Innstillinger", "Leaderboard" → "Resultatliste"), so every layout that was tuned to
 // English copy has to be looked at again. Run it explicitly and read the PNGs:
 //
 //   SHOT_DIR=/tmp/shots VISUAL_AUDIT=1 E2E_PORT=4103 npx playwright test e2e/zz-public-visual-nb.spec.ts
@@ -77,7 +77,7 @@ test('capture the Norwegian spectator tabs', async ({ browser }) => {
     const page = await ctx.newPage();
 
     await page.goto(`/tournaments/${t.id}`); await shoot(page, '01-oversikt', key);
-    await page.goto(`/tournaments/${t.id}?tab=bracket`); await shoot(page, '02-kampoppsett', key);
+    await page.goto(`/tournaments/${t.id}?tab=bracket`); await shoot(page, '02-bracket', key);
     await page.goto(`/tournaments/${t.id}?tab=teams`); await shoot(page, '03-lag', key);
     await page.goto(`/tournaments/${t.id}?tab=players`); await shoot(page, '04-spillere', key);
     await page.goto(`/tournaments/${t.id}?tab=matches`); await shoot(page, '05-kamper', key);
@@ -130,7 +130,7 @@ test('capture a 16-team Norwegian bracket, where the longest stage name appears'
   for (const [key, w, h] of [['desktop', 1512, 950], ['phone', 390, 844], ['obs', 1920, 1080]] as const) {
     const ctx = await nbContext(browser, w, h);
     const page = await ctx.newPage();
-    await page.goto(`/tournaments/${big.id}?tab=bracket`); await shoot(page, '11-r16-kampoppsett', key, '.react-flow__node');
+    await page.goto(`/tournaments/${big.id}?tab=bracket`); await shoot(page, '11-r16-bracket', key, '.react-flow__node');
     await page.goto(`/tournaments/${big.id}?tab=matches`); await shoot(page, '12-r16-kamper', key, '[data-testid="public-match-board"]');
     if (key === 'obs') {
       await page.goto(`/bracket/${big.id}/overlay?chroma=%23101014`);

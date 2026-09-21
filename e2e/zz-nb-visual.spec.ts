@@ -177,9 +177,12 @@ test('03 — login, palette, toast, route states, header', async ({ browser }) =
     await ctx.close();
   }
 
-  // Palette (player + staff) and a toast — desktop and phone both, because the palette is the
-  // one piece of chrome whose Norwegian labels are the longest strings in the app.
-  for (const [label, viewport] of [['desktop', DESKTOP], ['phone', PHONE]] as const) {
+  // Palette (player + staff) and a toast. Desktop only for the palette legs: the header door is
+  // `hidden md:flex` now, because on a phone it was the fourth glyph in a row of four and every
+  // command behind it is a link already in the hamburger drawer. The Norwegian labels inside the
+  // palette are still the longest strings in the app, so they are still worth a look — at the
+  // viewport where a person can actually open it.
+  for (const [label, viewport] of [['desktop', DESKTOP]] as const) {
     const { ctx, page } = await newPage(browser, viewport);
     await loginAs(page, 'leo');
     await page.goto('/dashboard');

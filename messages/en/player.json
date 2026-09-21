@@ -35,8 +35,6 @@
     "round": "Round {round}"
   },
   "fact": {
-    "match": "Your match",
-    "matchLine": "{stage} · BO{bestOf}",
     "stillToPlay": "Still to play",
     "stillToPlayCount": "{count, plural, one {# match} other {# matches}}"
   },
@@ -74,11 +72,11 @@
     "label": "Your seat",
     "none": "No seat set",
     "set": "Set your seat",
-    "helper": "Marshals use this to find you. You can change it later.",
+    "helper": "The crew use this to find you.",
     "placeholder": "e.g. B12",
     "cancelAria": "Cancel seat edit",
     "savedTitle": "Seat saved: {seat}",
-    "savedHint": "Marshals can now find you on the floor.",
+    "savedHint": "The crew can now find you on the floor.",
     "clearedTitle": "Seat cleared",
     "errorTitle": "Could not save your seat",
     "errorHint": "Please try again."
@@ -87,10 +85,7 @@
     "label": "Player profile",
     "signInTitle": "Sign in to see your profile",
     "signInBody": "Your teams, the tournaments you're in, and the seat each of them knows you by.",
-    "steamConnected": "Steam connected",
-    "statTournaments": "{count, plural, one {<n>#</n> tournament} other {<n>#</n> tournaments}}",
     "statOpenMatches": "{count, plural, one {<n>#</n> open match} other {<n>#</n> open matches}}",
-    "statSeats": "{count, plural, one {<n>#</n> seat saved} other {<n>#</n> seats saved}}",
     "loading": "Loading your tournaments…",
     "emptyTitle": "No tournaments yet",
     "emptyBody": "Sign up for one and it shows up here with your team and your seat.",

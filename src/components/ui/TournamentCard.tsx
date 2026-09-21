@@ -1,7 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { ArrowRight, Gamepad2, Trophy, Users } from "lucide-react";
+import { ArrowRight, Gamepad2 } from "lucide-react";
 import { Badge } from "./Badge";
 import { Card, CardTitle } from "./Card";
 
@@ -62,17 +62,19 @@ export function TournamentCard({
           <Badge tone={stageTone}>{stageLabel}</Badge>
         </div>
 
+        {/* No glyphs on this row. A trophy next to "Enkel utslagning" and a person next to
+            "8 lag" restate the words beside them, and both stats already carry a screen-reader
+            label. The two blocks stay separate — one flattened "Single elim · 5v5 · 8 lag"
+            string would lose those labels — so the pulsing live dot is the only glyph here. */}
         <dl className="mds-stat-row">
           <div className="mds-stat">
             <dt className="sr-only">{t("format")}</dt>
-            <Trophy size={13} aria-hidden />
             <dd>
               {format} · {roster}
             </dd>
           </div>
           <div className="mds-stat">
             <dt className="sr-only">{t("teams")}</dt>
-            <Users size={13} aria-hidden />
             <dd>{t("teamCount", { count: teamCount })}</dd>
           </div>
           {isLive && liveCount > 0 && (

@@ -26,7 +26,9 @@ async function registerTeam(page: Page, tournamentId: string, teamName: string, 
   await page.getByPlaceholder('Enter unique team name').fill(teamName);
   await page.locator('#create-seating').fill(seat);
   await page.getByRole('button', { name: /Complete Registration/i }).click();
-  await expect(page.getByRole('heading', { name: 'Registration Confirmed' })).toBeVisible();
+  // The confirmation header IS the team name now. "Du er påmeldt" over "Du er påmeldt med Team
+  // Fjord." was word-for-word containment, and it pushed the seat down the page.
+  await expect(page.getByRole('heading', { name: teamName })).toBeVisible();
 }
 
 /** The invite code the signup route minted for a persona's team. */
@@ -81,17 +83,17 @@ test('the invite link opens a join form, and the new teammate lands on the leade
     await samPage.locator('#join-seating').fill('B13');
     await samPage.getByRole('button', { name: /Join Roster/i }).click();
 
-    await expect(samPage.getByRole('heading', { name: 'Registration Confirmed' })).toBeVisible();
+    await expect(samPage.getByRole('heading', { name: 'Leo Legion' })).toBeVisible();
     await expect(samPage.getByText('Roster (2/2)')).toBeVisible();
     await expect(samPage.getByRole('listitem').filter({ hasText: 'Sam' })).toContainText('B13');
   } finally {
     await samContext.close();
   }
 
-  // Leo reloads: his panel is now the "Your Team" view with both players on it, and the invite
-  // section is gone because a full roster has nothing left to invite.
+  // Leo reloads: his panel is the team view with both players on it, and the invite section is
+  // gone because a full roster has nothing left to invite.
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Your Team' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Leo Legion' })).toBeVisible();
   await expect(page.getByText('Roster (2/2)')).toBeVisible();
   await expect(page.getByRole('listitem').filter({ hasText: 'Sam' })).toContainText('B13');
   await expect(page.getByText('Invite Teammates')).toBeHidden();
@@ -180,7 +182,7 @@ test('a locked roster keeps the team panel and the seat editor but withdraws "le
   await page.goto(`/tournaments/${tournament.id}/register`);
 
   // Already on a team → the team panel, never the "Registration Closed" notice.
-  await expect(page.getByRole('heading', { name: 'Your Team' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Leo Legion' })).toBeVisible();
   await expect(page.getByText('Bracket is live — roster locked')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Registration Closed' })).toBeHidden();
   await expect(page.getByRole('button', { name: /Leave Team/i })).toBeHidden();

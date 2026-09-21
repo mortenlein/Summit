@@ -60,10 +60,11 @@ export default function ProfilePage() {
     const { registrations = [], stats } = profile || {};
     // ICU plurals, not an `n === 1 ?` pair: Norwegian counts differently and "1 turneringer"
     // would be the first thing a player notices. The figure keeps its numeric face via <n>.
-    const facts: { key: 'statTournaments' | 'statOpenMatches' | 'statSeats'; n: number }[] = [
-        { key: 'statTournaments', n: stats?.tournamentsJoined ?? 0 },
+    // One fact, not three. "3 turneringer" and "3 plasser" sat above a list of three cards each
+    // carrying its own tournament name and its own seat — the reader counts them by looking.
+    // Open matches is the only signal on this page that is not repeated below it.
+    const facts: { key: 'statOpenMatches'; n: number }[] = [
         { key: 'statOpenMatches', n: stats?.activeMatches ?? 0 },
-        { key: 'statSeats', n: stats?.seatAssignments ?? 0 },
     ];
 
     return (
@@ -89,10 +90,17 @@ export default function ProfilePage() {
                         few pixels on a phone whenever the badge and the sign-out button happen to
                         fit beside it, and the player's own name wraps one letter per line. The
                         minimum makes the actions wrap to their own row instead. */}
-                    <div className="min-w-[12rem] flex-1">
-                        <p className="mds-uppercase-label text-fg-subtle">{t('profile.label')}</p>
+                    {/* "SPILLERPROFIL" is an aria-label on the section, not a line of type over
+                        the kid's own name. The name is guarded, and a shimmer stands in while the
+                        session resolves, or cutting the label would leave a grey square over a
+                        void on a slow load. */}
+                    <div className="min-w-[12rem] flex-1" aria-label={t('profile.label')}>
                         {/* The player's own casing — never shouted back at them. */}
-                        <h1 className="mds-name-lg text-2xl">{session?.user?.name}</h1>
+                        {session?.user?.name ? (
+                            <h1 className="mds-name-lg text-2xl">{session.user.name}</h1>
+                        ) : (
+                            <div className="h-8 w-40 animate-pulse rounded-sm bg-white/5" />
+                        )}
                         <p className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-fg-muted">
                             {/* Counts of nothing are noise — the empty state below says it better. */}
                             {registrations.length > 0 &&
@@ -109,7 +117,10 @@ export default function ProfilePage() {
                         </p>
                     </div>
                     <div className="flex items-center gap-2">
-                        <Badge tone="ready">{t('profile.steamConnected')}</Badge>
+                        {/* No "Steam tilkoblet" chip. It was unconditional, so a Discord sign-in
+                            was told it was connected to Steam — and `tone="ready"` is this app's
+                            "din tur" green. A permanent green chip on an account page spends
+                            that colour everywhere it actually means something. */}
                         <Button
                             variant="secondary"
                             type="button"
@@ -133,9 +144,9 @@ export default function ProfilePage() {
                     DM to Discord is how a player at their PC finds out they have been called. */}
                 <DiscordLinkCard />
 
-                <section className="space-y-3">
-                    <p className="mds-uppercase-label text-fg-subtle">{t('tournaments.label')}</p>
-
+                {/* A section header over the only section on the page names something the reader
+                    is already looking at. The name survives for a screen reader. */}
+                <section className="space-y-3" aria-label={t('tournaments.label')}>
                     {loading && registrations.length === 0 && (
                         <Card className="flex items-center gap-3" aria-busy="true">
                             <Loader2 size={16} className="animate-spin text-brand" />

@@ -20,7 +20,9 @@ export function MockPersonaButtons({ callbackUrl }: { callbackUrl: string }) {
   }
 
   return (
-    <div className="w-full space-y-3 border-t border-line pt-5">
+    // The card lives here, not on the login page: in production this component renders null, so
+    // a card around it there was a border drawn around one button.
+    <div className="mds-card w-full space-y-3 p-5">
       {/* A persona is a *name*, so the buttons carry it as content: no uppercase, no tracking. */}
       <p className="mds-uppercase-label text-center text-fg-subtle">{t('login.mockPersonas')}</p>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">

@@ -85,13 +85,13 @@
     "none": "Ingen kamper ennå — bracketen er ikke laget."
   },
   "registry": {
-    "counts": "<n>{teams}</n> påmeldt · <n>{players}</n> spillere",
     "searchPlaceholder": "Søk etter lag …",
     "seed": "Seeding <n>{seed}</n>",
     "seedEmpty": "Seeding —",
     "playerBadge": "{count, plural, one {# SPILLER} other {# SPILLERE}}",
     "details": "Detaljer",
-    "noMatch": "Ingen treff på «{search}»."
+    "noMatch": "Ingen treff på «{search}».",
+    "empty": "Ingen lag påmeldt ennå."
   },
   "overlay": {
     "loading": "Laster bracket …",

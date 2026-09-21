@@ -4,48 +4,80 @@ import React, { useMemo } from 'react';
 import Image from 'next/image';
 import ReactFlow, { Background, Edge, Node, Handle, Position } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Trophy } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { isDone, isLive } from '@/lib/match-status';
+import { isCalled, isDone, isLive } from '@/lib/match-status';
 import { isDoubleElimination, slotLabel, stageName, type Translator } from './tournament/match-labels';
 
 const COL_W = 320;
 const UNIT_Y = 176;
 
-function TeamRow({ team, label, score, scoreClass }: { team: any; label: string; score: number; scoreClass: string }) {
+/**
+ * One side of a bracket node.
+ *
+ * The logo slot is held, empty and borderless, for every row. At the zoom a phone clamps this
+ * canvas to (~0.4), the old bordered box plus its gap spent roughly 36px of a 260px card on a
+ * 9px grey smudge — and conditioning the slot per row instead ships a ragged left edge down the
+ * whole bracket. Initials or a coloured dot would be a different glyph, not one fewer.
+ */
+function TeamRow({
+    team,
+    label,
+    score,
+    scoreClass,
+    showScore,
+}: {
+    team: any;
+    label: string;
+    score: number;
+    scoreClass: string;
+    showScore: boolean;
+}) {
     return (
         <div className="flex items-center gap-3 rounded-sm bg-field px-3 py-2">
-            <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-sm border border-line bg-page">
-                {team?.logoUrl ? (
-                    <Image src={team.logoUrl} alt="" fill className="object-contain p-0.5" />
-                ) : (
-                    <Trophy size={12} className="absolute inset-0 m-auto text-fg-subtle" />
-                )}
+            <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-sm">
+                {team?.logoUrl && <Image src={team.logoUrl} alt="" fill className="object-contain p-0.5" />}
             </div>
             <span className={`mds-name mds-clamp-2 min-w-0 flex-1 text-xs leading-snug ${team?.name ? 'text-fg' : 'text-fg-subtle'}`}>
                 {label}
             </span>
-            <span className={`mds-numeric tabular-nums text-base font-bold ${scoreClass}`}>
-                {score}
-            </span>
+            {showScore && (
+                <span className={`mds-numeric tabular-nums text-base font-bold ${scoreClass}`}>
+                    {score}
+                </span>
+            )}
         </div>
     );
 }
 
-function scoreTone(decided: boolean, score: number, other: number) {
-    if (!decided) return 'text-fg-subtle';
+/**
+ * `live` is its own case: a match in progress is the one every spectator is looking for, and
+ * `text-fg-subtle` made its 0-0 exactly as grey as the fake zeros this file no longer prints.
+ * Matches TournamentView's live score treatment.
+ */
+function scoreTone(decided: boolean, live: boolean, score: number, other: number) {
+    if (!decided) return live ? 'text-fg' : 'text-fg-subtle';
     return score > other ? 'text-brand' : 'opacity-20';
 }
 
 const PublicMatchNode = ({ data }: any) => {
     const tStatus = useTranslations('status');
     const live = isLive(data.status);
+    const called = isCalled(data.status);
+    // "Has a result", not "is decided": eight fake zeros used to sit on the unplayed half of
+    // every bracket. A live 0-0 and every finished score stay.
+    const hasResult = live || data.decided || data.homeScore !== 0 || data.awayScore !== 0;
 
     return (
         <div
             onClick={() => data.onMatchClick?.(data.id)}
             className={`mds-card w-[260px] cursor-pointer p-2 ${
-                live ? 'border-danger' : data.isFinal ? 'border-brand' : 'border-line hover:border-brand'
+                live
+                    ? 'border-danger'
+                    : called
+                      ? 'border-success'
+                      : data.isFinal
+                        ? 'border-brand'
+                        : 'border-line hover:border-brand'
             }`}
         >
             {/* Handles — invisible, but the edges attach to them. */}
@@ -59,6 +91,12 @@ const PublicMatchNode = ({ data }: any) => {
                         <span className="h-1.5 w-1.5 rounded-full bg-danger animate-pulse" />
                         {tStatus('live')}
                     </span>
+                ) : called ? (
+                    // "Go to your seat" was invisible on the bracket. It is the only state here
+                    // that asks somebody to do something.
+                    <span className="mds-uppercase-label text-[10px] text-success">
+                        {tStatus('called')}
+                    </span>
                 ) : null}
             </div>
 
@@ -68,13 +106,15 @@ const PublicMatchNode = ({ data }: any) => {
                     team={data.homeTeam}
                     label={data.homeLabel}
                     score={data.homeScore}
-                    scoreClass={scoreTone(data.decided, data.homeScore, data.awayScore)}
+                    scoreClass={scoreTone(data.decided, live, data.homeScore, data.awayScore)}
+                    showScore={hasResult}
                 />
                 <TeamRow
                     team={data.awayTeam}
                     label={data.awayLabel}
                     score={data.awayScore}
-                    scoreClass={scoreTone(data.decided, data.awayScore, data.homeScore)}
+                    scoreClass={scoreTone(data.decided, live, data.awayScore, data.homeScore)}
+                    showScore={hasResult}
                 />
             </div>
         </div>

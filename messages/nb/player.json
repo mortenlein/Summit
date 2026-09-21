@@ -35,8 +35,6 @@
     "round": "Runde {round}"
   },
   "fact": {
-    "match": "Kampen din",
-    "matchLine": "{stage} · BO{bestOf}",
     "stillToPlay": "Igjen å spille",
     "stillToPlayCount": "{count, plural, one {# kamp} other {# kamper}}"
   },
@@ -74,7 +72,7 @@
     "label": "Plassen din",
     "none": "Ingen plass satt",
     "set": "Sett plassen din",
-    "helper": "Crewet bruker denne for å finne deg. Du kan endre den senere.",
+    "helper": "Crewet bruker denne for å finne deg.",
     "placeholder": "f.eks. B12",
     "cancelAria": "Avbryt redigering av plass",
     "savedTitle": "Plassen er lagret: {seat}",
@@ -87,10 +85,7 @@
     "label": "Spillerprofil",
     "signInTitle": "Logg inn for å se profilen din",
     "signInBody": "Lagene dine, turneringene du er med i, og plassen hver av dem kjenner deg på.",
-    "steamConnected": "Steam tilkoblet",
-    "statTournaments": "{count, plural, one {<n>#</n> turnering} other {<n>#</n> turneringer}}",
     "statOpenMatches": "{count, plural, one {<n>#</n> åpen kamp} other {<n>#</n> åpne kamper}}",
-    "statSeats": "{count, plural, one {<n>#</n> plass lagret} other {<n>#</n> plasser lagret}}",
     "loading": "Laster turneringene dine…",
     "emptyTitle": "Ingen turneringer ennå",
     "emptyBody": "Meld deg på en, så dukker den opp her med laget ditt og plassen din.",

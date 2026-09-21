@@ -195,7 +195,7 @@ test('the register screen hands a new team its invite link', async ({ page }) =>
   await page.locator('#create-seating').fill('B12');
   await page.getByRole('button', { name: /Complete Registration/i }).click();
 
-  await expect(page.getByText('Registration Confirmed')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Leo Legion' })).toBeVisible();
   // The invite panel is the only place the join credential surfaces to a player.
   await expect(page.getByText('Invite Teammates')).toBeVisible();
   await expect(page.getByRole('button', { name: /Copy Invite Link/i })).toBeVisible();

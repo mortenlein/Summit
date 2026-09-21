@@ -13,6 +13,31 @@ Vocabulary check first (verified by grep): `vakt` appears nowhere in `src/`, `me
 
 ---
 
+## STATUS
+
+**Tier 1 shipped** on branch `kid-clutter-tier1`, 2026-09-21, in four commits (step 0 + sections
+1-2, section 3, section 4, sections 5-8). Full suite green at 260 after each.
+
+Deviations from this plan, all deliberate and all noted in the commit that made them:
+
+- **Step 0 found a live string the plan said did not exist.** `messages/nb/notifications.json`
+  still shipped `"footerUpnext": "Summit kampoppsett"` — the footer on the Discord up-next post
+  kids read. Now `Summit kampprogram`, matching the English "running order". The glossary row
+  teaching `Lag kampoppsett` was corrected too.
+- **§1 dropped the whole stage Fact**, rather than only its `· BO{bestOf}` suffix. With the
+  suffix gone the block held one short phrase in a bordered box beside the seat; the stage now
+  reads as a muted line under the matchup it describes.
+- **§3 took the "better, and the real fix"** for the loading state: the register route is split
+  into a server shell that prefetches the tournament, so the name is on the first frame.
+- **§4's `hasResult` gate** is applied to `PublicBracket` as well as `MatchList`, and the live
+  score bump to `text-fg` came with it.
+- **§5's "bigger question"** — merging `/profile` into the desk — is **not** taken. It is a
+  structural change with three named preconditions, and none of them is a clutter fix.
+
+**Tier 2 (53 shrink) has not been started.**
+
+---
+
 ## TIER 1 — CUT
 
 ### 1. PLAYER DESK (`/dashboard`) — the money screen, do this first

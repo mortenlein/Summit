@@ -9,7 +9,7 @@
   "roster_locked_identity": "Endringer i lagene er låst. Plass, navn, kallenavn og flagg kan fortsatt endres; Steam-ID og lagleder krever at lagredigering låses opp.",
   "seeding_locked": "Seeding er låst mens bracketen er i gang. Navn og logo kan fortsatt endres.",
   "bracket_locked": "Endringer i bracketen er låst. Lås opp lagredigering i turneringsinnstillingene før du lager kampene på nytt.",
-  "player_move_locked": "Bracketen er live — be en arrangør om å flytte deg.",
+  "player_move_locked": "Bracketen er live — be en i crewet om å flytte deg.",
   "signups_disabled": "Påmelding med Steam er skrudd av for denne turneringen",
   "registration_locked": "Påmeldingen er stengt for denne turneringen akkurat nå",
   "team_name_required": "Du må gi laget et navn",

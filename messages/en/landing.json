@@ -1,5 +1,4 @@
 {
-  "eyebrow": "CS2 LAN tournaments",
   "subtitle": "Run a LAN from sign-up to grand final: Steam registration, seeded brackets, live match control and an OBS overlay — one surface the whole room can follow.",
   "playingNow": "{count, plural, one {# match is being played right now} other {# matches are being played right now}}",
   "nothingPlaying": "Nothing is being played right now.",
@@ -8,7 +7,6 @@
   "floorHeadingLive": "Playing now",
   "floorHeadingCalled": "Called to station",
   "moreCalled": "{count} more called to station",
-  "listed": "{count, plural, other {# listed}}",
   "browseAll": "Browse all →",
   "emptyTitle": "No tournaments yet",
   "emptyAdmin": "Create the first tournament from the organizer workspace.",
