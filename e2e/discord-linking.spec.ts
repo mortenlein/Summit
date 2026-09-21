@@ -24,11 +24,36 @@ const CODE_SHAPE = /^[23456789BCDFGHJKMNPQRSTVWXYZ]{6}$/;
 const LEO_DISCORD = '300000000000000001';
 const LEO_DISCORD_TWO = '300000000000000002';
 const SAM_DISCORD = '300000000000000003';
+const CHLOE_DISCORD = '300000000000000004';
+const TOBY_DISCORD = '300000000000000005';
+/** A second account racing a stolen code. */
+const THIEF_DISCORD = '300000000000000006';
 /** The one the mock probe refuses with 50007 (DISCORD_DM_MOCK_BLOCKED in playwright.config.ts). */
 const DMS_CLOSED_DISCORD = '300000000000000900';
 
+/** Every persona this spec touches, so the teardown can put them all back. */
+const PERSONAS = ['leo', 'sam', 'chloe', 'toby'] as const;
+
 test.describe.configure({ mode: 'serial' });
 test.afterEach(disposeApiContexts);
+
+/**
+ * Put the personas back.
+ *
+ * This spec links Discord accounts and pins `User.locale` on four shared personas. Left behind,
+ * a linked account follows them into every later spec's profile page and a pinned `locale`
+ * quietly re-languages a suite that is deliberately run in English.
+ */
+test.afterAll(async () => {
+  for (const persona of PERSONAS) {
+    const userId = await personaUserId(persona).catch(() => null);
+    if (!userId) continue;
+    await prisma.discordDmAttempt.deleteMany({ where: { userId } });
+    await prisma.discordLink.deleteMany({ where: { userId } });
+    await prisma.discordLinkCode.deleteMany({ where: { userId } });
+    await prisma.user.updateMany({ where: { id: userId }, data: { locale: null } });
+  }
+});
 
 /** A call as the bot would make it, over the compose network, with the bearer it was given. */
 async function botPost(path: string, data: unknown, key: string | null = BOT_KEY) {
@@ -177,30 +202,39 @@ test('the happy path writes the link, probes the DM, and replies in the player\'
   expect(body.relinked).toBe(false);
   // The bot prints this verbatim — every Norwegian character stays in messages/.
   expect(body.reply).toContain('Koblet!');
-  expect(body.reply).toContain('LeoTheKid');
+  // There is no Discord token in this suite, so nothing was sent — and the reply says exactly
+  // that instead of "Jeg har sendt deg en melding", which is the sentence that is only allowed
+  // to appear off a real 204.
+  expect(body.reply).toContain('ikke sendt deg');
+  expect(body.dmState).toBe('UNKNOWN');
 
   const link = await prisma.discordLink.findUnique({ where: { userId: leoId } });
   expect(link).toMatchObject({
     discordId: LEO_DISCORD,
     discordUsername: 'leo_6614',
     optOut: false,
-    dmState: 'SENT',
+    // Not SENT. The mock composed a message and sent nothing, and `dmState` is what every
+    // reach counter in the product reads — SENT here would overstate reach for the whole club.
+    dmState: 'UNKNOWN',
   });
-  expect(link?.dmCheckedAt).not.toBeNull();
+  // `dmCheckedAt` is a *check* timestamp. Discord was never asked, so there is nothing to date.
+  expect(link?.dmCheckedAt).toBeNull();
 
   // The code is spent in the same transaction as the link.
   expect(await prisma.discordLinkCode.count({ where: { userId: leoId } })).toBe(0);
 
-  // Nothing may claim a player was reached without a row here.
+  // Nothing may claim a player was reached without a row here — and this row must be able to
+  // tell a mock run apart from a real one, in the database, forever.
   const attempts = await prisma.discordDmAttempt.findMany({ where: { userId: leoId } });
   expect(attempts).toHaveLength(1);
   expect(attempts[0]).toMatchObject({
     event: 'LINK_PROBE',
-    outcome: 'SENT',
+    outcome: 'MOCKED',
     matchId: null,
     locale: 'nb',
     discordId: LEO_DISCORD,
   });
+  expect(attempts[0].outcome).not.toBe('SENT');
 
   // Put the roster back: the seeds here only *add*, and a stray registration on this persona
   // would follow them into every later spec's desk.
@@ -378,14 +412,174 @@ test('a player can unlink themselves, and a second unlink is a no-op', async () 
   const leoId = await personaUserId('leo');
   const api = await apiAs('leo');
 
+  // There is delivery history on this persona by now — that is the point of the next assertion.
+  expect(await prisma.discordDmAttempt.count({ where: { userId: leoId } })).toBeGreaterThan(0);
+
   const first = await api.delete('/api/me/discord');
   expect(first.status()).toBe(200);
   expect(await json(first)).toMatchObject({ success: true, removed: 1 });
   expect(await prisma.discordLink.count({ where: { userId: leoId } })).toBe(0);
 
+  // "Unlink" has to mean the snowflake is really gone. A minor's Discord id left behind in the
+  // attempt log is the one thing the design promised a parent it would not keep, and with the
+  // link deleted there is no reach claim left for those rows to back.
+  expect(await prisma.discordDmAttempt.count({ where: { userId: leoId } })).toBe(0);
+  expect(await prisma.discordLinkCode.count({ where: { userId: leoId } })).toBe(0);
+
   const second = await api.delete('/api/me/discord');
   expect(second.status()).toBe(200);
   expect(await json(second)).toMatchObject({ success: true, removed: 0 });
+});
+
+test('a garbled snowflake is refused with something the kid can act on', async () => {
+  // Not a Discord account at all — a bot bug, or a forged call. `bot.noCode` would tell them to
+  // paste a code, which is the one thing that cannot help here.
+  const code = await issueCodeAs('sam');
+  const res = await botPost('/api/discord/link', {
+    code,
+    discordId: 'not-a-snowflake',
+    discordUsername: 'whoever',
+  });
+  const body = await json<any>(res);
+  expect(body).toMatchObject({ ok: false, reason: 'bad_request' });
+  // There is no user behind an unresolvable snowflake, so — like the unknown-code refusal
+  // above — the reply is written in the house language. This is a Norwegian club.
+  expect(body.reply).toContain('Fant ikke koden');
+  expect(body.reply).not.toContain('lim inn koden');
+
+  // Nothing was written, and the code still works.
+  const samId = await personaUserId('sam');
+  expect(await prisma.discordLinkCode.count({ where: { userId: samId } })).toBe(1);
+});
+
+test('a link with no username from Discord still reads as something, never a blank', async () => {
+  await mintSessionToken('chloe');
+  const chloeId = await personaUserId('chloe');
+  await resetDiscord(chloeId);
+
+  const code = await issueCodeAs('chloe');
+  // Discord does not always hand the bot a username (stripped payload, account mid-rename).
+  const res = await botPost('/api/discord/link', { code, discordId: CHLOE_DISCORD });
+  expect(await json(res)).toMatchObject({ ok: true });
+
+  const link = await prisma.discordLink.findUnique({ where: { userId: chloeId } });
+  // "Koblet til Discord som " with nothing after it reads as a broken row on the card and on
+  // every crew screen that prints it next to a name.
+  expect(link?.discordUsername).toBe('Discord');
+  await resetDiscord(chloeId);
+});
+
+test('one code, one redemption: a second bot call against the same code loses', async () => {
+  await mintSessionToken('sam');
+  const samId = await personaUserId('sam');
+  await resetDiscord(samId);
+
+  const code = await issueCodeAs('sam');
+
+  // A shoulder-surfed code, raced against its owner. Both calls carry the same live code; the
+  // compare-and-swap inside the redemption transaction has to let exactly one through.
+  const [first, second] = await Promise.all([
+    botPost('/api/discord/link', { code, discordId: SAM_DISCORD, discordUsername: 'sam_6614' }),
+    botPost('/api/discord/link', { code, discordId: THIEF_DISCORD, discordUsername: 'not_sam' }),
+  ]);
+
+  const bodies = [await json<any>(first), await json<any>(second)];
+  const winners = bodies.filter((b) => b.ok);
+  expect(winners).toHaveLength(1);
+  expect(bodies.filter((b) => !b.ok)[0]).toMatchObject({ reason: 'unknown_code' });
+
+  // One binding, one probe row — not two of either.
+  const links = await prisma.discordLink.findMany({ where: { userId: samId } });
+  expect(links).toHaveLength(1);
+  expect(await prisma.discordDmAttempt.count({ where: { userId: samId } })).toBe(1);
+  expect(await prisma.discordLinkCode.count({ where: { userId: samId } })).toBe(0);
+});
+
+test('the organizer kill switch stops the link probe too', async () => {
+  await mintSessionToken('toby');
+  const tobyId = await personaUserId('toby');
+  await resetDiscord(tobyId);
+  await prisma.user.update({ where: { id: tobyId }, data: { locale: 'en' } });
+
+  // An organizer has pulled "Pause Discord" on a tournament this player is in.
+  const tournament = await createTournament({ name: 'Paused DM cup' });
+  await prisma.tournament.update({
+    where: { id: tournament.id },
+    data: { discordDmPaused: true },
+  });
+  await createTeam(tournament.id, {
+    name: 'Paused FC',
+    players: [{ name: 'Toby Tang', nickname: 'Tobz', userId: tobyId }],
+  });
+
+  const code = await issueCodeAs('toby');
+  const res = await botPost('/api/discord/link', {
+    code,
+    // Not the blocked snowflake: if the switch leaks, the mock would answer and we would see it.
+    discordId: TOBY_DISCORD,
+    discordUsername: 'toby_6614',
+  });
+  const body = await json<any>(res);
+
+  // The link still stands — pausing DMs is not refusing an account.
+  expect(body.ok).toBe(true);
+  expect(body.dmState).toBe('UNKNOWN');
+  expect(body.reply).toContain("haven't sent you one");
+
+  // A kill switch one path ignores is not a kill switch: the row says why, by name.
+  const attempts = await prisma.discordDmAttempt.findMany({ where: { userId: tobyId } });
+  expect(attempts).toHaveLength(1);
+  expect(attempts[0].outcome).toBe('SKIPPED_PAUSED');
+  const link = await prisma.discordLink.findUnique({ where: { userId: tobyId } });
+  expect(link?.dmState).toBe('UNKNOWN');
+  expect(link?.dmCheckedAt).toBeNull();
+
+  await prisma.tournament.delete({ where: { id: tournament.id } });
+  await resetDiscord(tobyId);
+});
+
+test('crew can actually unlink a kid — which is what makes "tell the crew" true', async () => {
+  await mintSessionToken('chloe');
+  const chloeId = await personaUserId('chloe');
+  await resetDiscord(chloeId);
+
+  const code = await issueCodeAs('chloe');
+  expect(await json(await botPost('/api/discord/link', {
+    code,
+    discordId: CHLOE_DISCORD,
+    discordUsername: 'chloe_6614',
+  }))).toMatchObject({ ok: true });
+
+  // Not a player's button, and not a marshal's either: this severs someone else's binding.
+  const asPlayer = await apiAs('leo');
+  expect((await asPlayer.delete(`/api/discord/link/${chloeId}`)).status()).toBe(401);
+  const asMarshal = await apiAs('mia');
+  expect((await asMarshal.delete(`/api/discord/link/${chloeId}`)).status()).toBe(401);
+  expect(await prisma.discordLink.count({ where: { userId: chloeId } })).toBe(1);
+
+  const admin = await apiAs('marcus');
+  const res = await admin.delete(`/api/discord/link/${chloeId}`);
+  expect(res.status()).toBe(200);
+  const body = await json<any>(res);
+  expect(body).toMatchObject({ success: true, removed: 1 });
+  // Payload hygiene holds even for an admin: the snowflake never leaves the server.
+  expect(JSON.stringify(body)).not.toContain(CHLOE_DISCORD);
+
+  expect(await prisma.discordLink.count({ where: { userId: chloeId } })).toBe(0);
+  expect(await prisma.discordDmAttempt.count({ where: { userId: chloeId } })).toBe(0);
+
+  // Who unlinked whom is a question that gets asked afterwards.
+  const audit = await prisma.auditLog.findFirst({
+    where: { action: 'discord.unlinked', entityId: chloeId },
+    orderBy: { createdAt: 'desc' },
+  });
+  expect(audit).not.toBeNull();
+  expect(audit?.actor).toContain('admin');
+
+  // Idempotent: two admins on the same row must not 500 a staff screen mid-tournament.
+  const again = await admin.delete(`/api/discord/link/${chloeId}`);
+  expect(again.status()).toBe(200);
+  expect(await json(again)).toMatchObject({ success: true, removed: 0 });
 });
 
 test('the link routes are closed to anonymous callers', async () => {

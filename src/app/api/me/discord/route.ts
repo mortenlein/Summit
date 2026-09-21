@@ -88,7 +88,16 @@ export async function PATCH(request: Request) {
     data: { optOut: body.optOut },
   });
 
-  return NextResponse.json({ success: true, linked: result.count > 0, optOut: body.optOut });
+  // Report what was actually written. There is no link to hold a preference on when `count` is
+  // 0, so echoing the requested `optOut` back would tell the card a setting is in force that
+  // nothing is storing — the small version of the same lie this feature is built to avoid.
+  const applied = result.count > 0;
+  return NextResponse.json({
+    success: true,
+    applied,
+    linked: applied,
+    optOut: applied ? body.optOut : null,
+  });
 }
 
 /**

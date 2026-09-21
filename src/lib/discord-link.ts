@@ -32,13 +32,20 @@ const SNOWFLAKE = /^\d{17,20}$/;
 const USERNAME_MAX = 64;
 
 /**
- * Configured = the bot can actually reach us AND a kid who is not in the guild has somewhere
- * to go. Mirrors `isPushConfigured()`: the UI self-hides instead of offering a dead end, so
- * this deploys safely before the bot container exists.
+ * Configured = the bot can reach us, a kid who is not in the guild has somewhere to go, AND we
+ * hold the token that a DM actually needs. The token is part of the gate on purpose: the whole
+ * promise of the card is "link this and I will message you there", and without
+ * `DISCORD_BOT_TOKEN` the app cannot open a DM channel at all. Offering the card anyway would
+ * walk a 12-year-old through three steps to earn a link that can never deliver anything.
+ *
+ * Mirrors `isPushConfigured()`: the UI self-hides instead of offering a dead end.
  */
 export function isDiscordLinkConfigured(): boolean {
   return Boolean(
-    process.env.SUMMIT_BOT_KEY && process.env.DISCORD_GUILD_ID && process.env.DISCORD_INVITE_URL
+    process.env.SUMMIT_BOT_KEY &&
+      process.env.DISCORD_GUILD_ID &&
+      process.env.DISCORD_INVITE_URL &&
+      process.env.DISCORD_BOT_TOKEN
   );
 }
 
@@ -120,18 +127,54 @@ export async function liveLinkCode(userId: string): Promise<IssuedCode | null> {
 }
 
 // ---------------------------------------------------------------------------------------
-// The DM probe seam
+// The DM probe
 //
-// Linking proves an address; only a message proves we can *use* it. The probe is deliberately
-// injectable: there is no Discord token in this repo yet, so the default is the same mock
-// posture the channel announcer already has (log, don't send), and a test can assert what
-// WOULD have been sent — including a failure code — without a network.
+// Linking proves an *address*; only a message proves we can *use* it. Everything in this
+// section exists so the difference between those two is never blurred: an outcome written here
+// is the only evidence anything in the product may treat as "we sent them something", so it
+// may say SENT only when Discord itself returned success.
 //
-// The real sender lives in the DM module and registers itself here. This file never builds a
-// REST client of its own.
+// There is no Discord token in this repo, so the default posture is the one the channel
+// announcer already has: log, do not send — and record that as MOCKED, never as SENT.
 // ---------------------------------------------------------------------------------------
 
-export type DmOutcome = "SENT" | "BLOCKED" | "UNKNOWN_USER" | "RATE_LIMITED" | "ERROR";
+/**
+ * The vocabulary of `DiscordDmAttempt.outcome`.
+ *
+ * `SENT` is the load-bearing one and it means exactly one thing: **Discord's API accepted the
+ * message** (HTTP 200/204). It does not mean a phone was on, un-muted, or in a hand, and it
+ * must never be written for a message that was not really handed to Discord. Everything that
+ * did not reach Discord gets its own name instead, so no counter can quietly round it up:
+ *
+ * - `MOCKED`           — mock mode. We composed a message and sent nothing.
+ * - `SKIPPED_DISABLED` — `DISCORD_DM_ENABLED` is not `true`. Nothing was attempted.
+ * - `SKIPPED_PAUSED`   — an organizer pulled the per-tournament kill switch.
+ * - `SKIPPED_OPTOUT`   — the player said stop. Honoured before any send.
+ * - `BLOCKED` / `UNKNOWN_USER` / `RATE_LIMITED` / `ERROR` — Discord was asked and said no.
+ */
+export type DmOutcome =
+  | "SENT"
+  | "BLOCKED"
+  | "UNKNOWN_USER"
+  | "RATE_LIMITED"
+  | "ERROR"
+  | "MOCKED"
+  | "SKIPPED_DISABLED"
+  | "SKIPPED_PAUSED"
+  | "SKIPPED_OPTOUT";
+
+/** The outcomes that mean "Discord was never asked", as opposed to "Discord said no". */
+const NOT_ATTEMPTED: ReadonlySet<string> = new Set<DmOutcome>([
+  "MOCKED",
+  "SKIPPED_DISABLED",
+  "SKIPPED_PAUSED",
+  "SKIPPED_OPTOUT",
+]);
+
+/** True when we actually handed the message to Discord. Never infer this from `outcome !== 'SENT'`. */
+export function wasDmAttempted(outcome: DmOutcome): boolean {
+  return !NOT_ATTEMPTED.has(outcome);
+}
 
 export interface DmProbeRequest {
   discordId: string;
@@ -151,25 +194,28 @@ export interface DmProbeResult {
 
 export type DmProbe = (request: DmProbeRequest) => Promise<DmProbeResult>;
 
-let probeImpl: DmProbe | null = null;
-
-/** Register the real sender (or a test double). Returns the previous one, so a caller can restore it. */
-export function setDiscordDmProbe(probe: DmProbe | null): DmProbe | null {
-  const previous = probeImpl;
-  probeImpl = probe;
-  return previous;
+/**
+ * Mock mode is **explicit**, exactly like `discord.ts:130`: the flag, and nothing else.
+ *
+ * It deliberately does *not* fall back to "no `DISCORD_BOT_TOKEN`". That fallback is how a
+ * production deploy with a missing token silently turned into a mock that reported success for
+ * every kid on the floor. A missing token is now a misconfiguration that fails closed
+ * (`isDiscordLinkConfigured()` hides the card, and `runProbe` records `ERROR`), never a
+ * pretend-send.
+ */
+export function isDiscordDmMocked(): boolean {
+  return process.env.NEXT_PUBLIC_STRATEGY_3_MOCK === "true";
 }
 
-/** True while no real token is configured — the `[STRATEGY 3 MOCK]` posture, for DMs. */
-export function isDiscordDmMocked(): boolean {
-  return process.env.NEXT_PUBLIC_STRATEGY_3_MOCK === "true" || !process.env.DISCORD_BOT_TOKEN;
+/** The hard master switch from §5. Ships `false`; unset means off. */
+export function isDiscordDmEnabled(): boolean {
+  return process.env.DISCORD_DM_ENABLED === "true";
 }
 
 /**
  * Mock-only: snowflakes the mock probe refuses with 50007 ("Cannot send messages to this
  * user"), so the *failure* half of linking — the half that decides whether a marshal walks —
- * is verifiable with no Discord token in the repo. Comma-separated, unset in production, and
- * unreachable once a real sender is registered.
+ * is verifiable with no Discord token in the repo. Comma-separated, unset in production.
  */
 function mockBlockedIds(): Set<string> {
   return new Set(
@@ -180,30 +226,75 @@ function mockBlockedIds(): Set<string> {
   );
 }
 
+/**
+ * The mock never returns `SENT`.
+ *
+ * A simulated *failure* is safe: it under-claims reach, and the remedy it triggers (a marshal
+ * walks, the kid is told to re-run `/koble`) is the behaviour we want by default. A simulated
+ * *success* is the one thing this feature exists to prevent, so the happy path records
+ * `MOCKED` — distinguishable from a real 204 in the database, in the reach panel, and in a
+ * 02:00 query.
+ */
 const mockProbe: DmProbe = async ({ discordId, locale, body }) => {
   if (mockBlockedIds().has(discordId)) {
     console.log(`[DISCORD DM MOCK] ✗ ${discordId} (${locale}): 50007 cannot send messages to this user`);
     return { outcome: "BLOCKED", discordCode: 50007 };
   }
-  console.log(`[DISCORD DM MOCK] → ${discordId} (${locale}): ${body}`);
-  return { outcome: "SENT" };
+  console.log(`[DISCORD DM MOCK] (nothing sent) would DM ${discordId} (${locale}): ${body}`);
+  return { outcome: "MOCKED" };
 };
 
-async function runProbe(request: DmProbeRequest): Promise<DmProbeResult> {
-  const probe = probeImpl ?? (isDiscordDmMocked() ? mockProbe : null);
-  if (!probe) {
-    // Configured for real delivery, but nothing has registered a sender. Saying SENT here is
-    // the exact lie this feature exists to prevent, so the link stands and the DM does not.
-    return { outcome: "ERROR", error: "no_dm_sender_registered" };
-  }
-  try {
-    return await probe(request);
-  } catch (error: any) {
-    return { outcome: "ERROR", error: String(error?.message || error) };
-  }
+/**
+ * The phone-reachable kill switch (§10), applied to a link probe.
+ *
+ * A probe belongs to no match and therefore to no single tournament, so the conservative read
+ * wins: if *any* tournament this player is on has `discordDmPaused`, the organizer pulled that
+ * switch while this kid was on the floor, and they get no DM from us. Failing closed costs a
+ * kid one "not confirmed" line on a card; failing open costs the switch its meaning.
+ */
+async function isDmPausedForUser(userId: string): Promise<boolean> {
+  const paused = await prisma.player.findFirst({
+    where: { userId, tournament: { discordDmPaused: true } },
+    select: { id: true },
+  });
+  return Boolean(paused);
 }
 
-/** `dmState` is UNKNOWN | SENT | BLOCKED — three states, because the remedies differ. */
+/**
+ * Run the probe, or record honestly why we did not.
+ *
+ * Order matters: both kill switches are checked *before* anything is composed or sent, because
+ * a switch one path ignores is not a switch. The real sender does not exist yet — when
+ * `src/lib/discord-dm.ts` lands it is imported and called from the marked branch below. Until
+ * then a configured-for-real deploy records `ERROR`, never `SENT`.
+ */
+async function runProbe(request: DmProbeRequest, userId: string): Promise<DmProbeResult> {
+  if (!isDiscordDmEnabled()) {
+    return { outcome: "SKIPPED_DISABLED", error: "dm_disabled" };
+  }
+  if (await isDmPausedForUser(userId)) {
+    return { outcome: "SKIPPED_PAUSED", error: "dm_paused" };
+  }
+  if (isDiscordDmMocked()) {
+    try {
+      return await mockProbe(request);
+    } catch (error: any) {
+      return { outcome: "ERROR", error: String(error?.message || error) };
+    }
+  }
+  // ── The real sender plugs in here (§8). ──
+  // Configured for real delivery, but no sender exists yet. Saying SENT here is the exact lie
+  // this feature exists to prevent, so the link stands and the DM does not.
+  return { outcome: "ERROR", error: "no_dm_sender_registered" };
+}
+
+/**
+ * `dmState` is UNKNOWN | SENT | BLOCKED — three states, because the remedies differ.
+ *
+ * Only a real `SENT` maps to `SENT`. Everything we never actually attempted lands on UNKNOWN,
+ * which the card already renders as "not confirmed" and the reach panel already counts as
+ * unreachable.
+ */
 function dmStateFor(outcome: DmOutcome): "UNKNOWN" | "SENT" | "BLOCKED" {
   if (outcome === "SENT") return "SENT";
   if (outcome === "BLOCKED" || outcome === "UNKNOWN_USER") return "BLOCKED";
@@ -215,6 +306,13 @@ function dmStateFor(outcome: DmOutcome): "UNKNOWN" | "SENT" | "BLOCKED" {
 // ---------------------------------------------------------------------------------------
 
 export type LinkFailure = "bad_request" | "unknown_code" | "discord_taken";
+
+/** Thrown inside the redemption transaction to roll it back when the code was already spent. */
+class CodeAlreadySpent extends Error {
+  constructor() {
+    super("link code already spent");
+  }
+}
 
 export interface LinkResult {
   ok: boolean;
@@ -254,14 +352,22 @@ export async function redeemLinkCode(input: {
 }): Promise<LinkResult> {
   const code = normalizeLinkCode(input.code);
   const discordId = typeof input.discordId === "string" ? input.discordId.trim() : "";
+  // Never the empty string: this is rendered as "Koblet til Discord som {username}" on the card
+  // and next to a name on the crew's screens, and an empty slot there reads as a broken row.
+  // Discord does not always give the bot a username (a stripped interaction payload, an
+  // account mid-rename), so the fallback is the only honest thing we know: it is a Discord
+  // account, and the snowflake behind it is staff-only.
   const discordUsername =
     typeof input.discordUsername === "string" && input.discordUsername.trim()
       ? input.discordUsername.trim().slice(0, USERNAME_MAX)
-      : "";
+      : "Discord";
 
   if (!SNOWFLAKE.test(discordId)) {
+    // Not the kid's mistake and not something they can fix by pasting a code: the caller sent
+    // something that is not a Discord account at all. `bot.noCode` would tell them to do the
+    // one thing that cannot help, so they get the "that didn't resolve, get a new code" reply.
     const t = await getServerTranslations(userLocale(null), "discord");
-    return { ok: false, reason: "bad_request", reply: t("bot.noCode") };
+    return { ok: false, reason: "bad_request", reply: t("bot.unknownCode") };
   }
   if (code.length !== LINK_CODE_LENGTH) {
     const t = await getServerTranslations(userLocale(null), "discord");
@@ -296,14 +402,25 @@ export async function redeemLinkCode(input: {
     return { ok: false, reason: "discord_taken", reply: t("bot.alreadyTaken") };
   }
 
-  const previous = await prisma.discordLink.findUnique({ where: { userId: pending.userId } });
-  const relinked = Boolean(previous && previous.discordId !== discordId);
-
-  // One transaction: the code is spent exactly when the link is written, so a crash between
-  // the two cannot leave a live code for an account that is already bound.
+  // Compare-and-swap, not read-then-write.
+  //
+  // The code is a bearer credential for ten minutes and it is read aloud off a screen in a loud
+  // room. Spending it with a conditional `deleteMany` *inside* the transaction that writes the
+  // link means exactly one redemption can win: a shoulder-surfer racing the owner (or a bot
+  // retrying an 8s-timed-out call) finds `count === 0` and is refused, instead of both writing
+  // and the last one silently taking the binding. The `expiresAt` guard closes the same race
+  // against the TTL that the read above can only sample.
+  let relinked = false;
   try {
-    await prisma.$transaction([
-      prisma.discordLink.upsert({
+    relinked = await prisma.$transaction(async (tx) => {
+      const spent = await tx.discordLinkCode.deleteMany({
+        where: { code, userId: pending.userId, expiresAt: { gt: new Date() } },
+      });
+      if (spent.count === 0) throw new CodeAlreadySpent();
+
+      const previous = await tx.discordLink.findUnique({ where: { userId: pending.userId } });
+
+      await tx.discordLink.upsert({
         where: { userId: pending.userId },
         create: {
           userId: pending.userId,
@@ -324,10 +441,16 @@ export async function redeemLinkCode(input: {
           // place would mean the kid links, sees "koblet", and still never hears anything.
           optOut: false,
         },
-      }),
-      prisma.discordLinkCode.deleteMany({ where: { code } }),
-    ]);
+      });
+
+      return Boolean(previous && previous.discordId !== discordId);
+    });
   } catch (error: any) {
+    // Someone else spent this code first. Same answer as any other code we cannot resolve —
+    // and nothing was written, because the whole transaction rolled back.
+    if (error instanceof CodeAlreadySpent) {
+      return { ok: false, reason: "unknown_code", reply: t("bot.unknownCode") };
+    }
     // Two kids redeeming against the same snowflake in the same second: the @unique on
     // discordId is the real arbiter, and the loser is refused exactly like the checked case
     // above rather than 500ing at a bot that can only print a string.
@@ -341,23 +464,29 @@ export async function redeemLinkCode(input: {
 
   // The probe is the point of doing this inside Discord: the result is reported in the exact
   // place the real DM would land, so we never hold an address we silently cannot reach.
-  const probe = await runProbe({ discordId, locale, body: t("dm.probe.body") });
+  const probe = await runProbe({ discordId, locale, body: t("dm.probe.body") }, pending.userId);
   const dmState = dmStateFor(probe.outcome);
 
+  // `dmCheckedAt` is a *check* timestamp, so it is only stamped when Discord was actually
+  // asked. Stamping it for a skipped send would make a never-attempted link look freshly
+  // verified on every staff screen that sorts or ages by it.
+  const attempted = wasDmAttempted(probe.outcome);
+
   await prisma.discordLink.updateMany({
-    where: { userId: pending.userId },
+    where: { userId: pending.userId, discordId },
     data: {
       dmState,
-      dmCheckedAt: new Date(),
+      ...(attempted ? { dmCheckedAt: new Date() } : {}),
       dmError:
         probe.outcome === "SENT" ? null : probe.error || String(probe.discordCode ?? probe.outcome),
       ...(probe.dmChannelId !== undefined ? { dmChannelId: probe.dmChannelId } : {}),
     },
   });
 
-  // One row per attempt: nothing in the UI may claim a kid was reached without one of these.
-  // `matchId` is null for a probe, and SQLite treats NULLs as distinct in a unique index, so
-  // re-probing never collides with the previous attempt.
+  // One row per attempt: nothing in the UI may claim a kid was reached without one of these,
+  // and this row says SENT only when Discord itself accepted the message. `matchId` is null for
+  // a probe, and SQLite treats NULLs as distinct in a unique index, so re-probing never
+  // collides with the previous attempt.
   await prisma.discordDmAttempt.create({
     data: {
       userId: pending.userId,
@@ -369,12 +498,17 @@ export async function redeemLinkCode(input: {
     },
   });
 
+  // What the kid is told, and it has to match what happened. "I've sent you a message" is only
+  // ever printed off a real SENT; a skipped send says so rather than borrowing the vaguer
+  // "couldn't confirm", which would imply we tried.
   const reply =
     dmState === "SENT"
       ? t("bot.linkedReply", { name: escapeDiscordText(name) })
       : dmState === "BLOCKED"
         ? t("bot.linkedReplyBlocked")
-        : t("bot.linkedReplyUnconfirmed");
+        : attempted
+          ? t("bot.linkedReplyUnconfirmed")
+          : t("bot.linkedReplyDmOff");
 
   return { ok: true, reply, name, locale, relinked, dmState };
 }
@@ -415,11 +549,24 @@ export async function setOptOutByDiscordId(
   return { ok: true, reply: optOut ? t("bot.optedOut") : t("bot.optedIn") };
 }
 
-/** Self-unlink from the app side. `deleteMany` so a second click is a no-op, never a P2025. */
+/**
+ * Unlink — from the profile card, or from crew on a kid's behalf.
+ *
+ * `deleteMany` throughout, so a second click (or two admins at once) is a no-op, never a P2025.
+ *
+ * The `DiscordDmAttempt` rows go too. They exist to stop the product claiming a player was
+ * reached, and once the link is gone there is no claim left to back — what remains is a
+ * minor's Discord snowflake sitting in a table, which is the one thing the design promised a
+ * parent it would not keep. "Unlink" has to mean the snowflake is actually gone. The delivery
+ * history that a marshal could still need is the per-match `MATCH_*` rows on the *match*, and
+ * those are recreated on the next send; a `LINK_PROBE` row for a link that no longer exists is
+ * only personal data.
+ */
 export async function unlinkUser(userId: string): Promise<{ removed: number }> {
   const [link] = await prisma.$transaction([
     prisma.discordLink.deleteMany({ where: { userId } }),
     prisma.discordLinkCode.deleteMany({ where: { userId } }),
+    prisma.discordDmAttempt.deleteMany({ where: { userId } }),
   ]);
   return { removed: link.count };
 }

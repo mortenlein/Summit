@@ -246,7 +246,12 @@ model DiscordDmAttempt {
   /// LINK_PROBE | MATCH_CALLED | MATCH_LIVE | MATCH_UPCOMING | MATCH_RESULT
   event       String
   matchId     String?
-  /// SENT | BLOCKED | UNKNOWN_USER | RATE_LIMITED | ERROR | SKIPPED_OPTOUT
+  /// SENT | BLOCKED | UNKNOWN_USER | RATE_LIMITED | ERROR
+  ///   | MOCKED | SKIPPED_DISABLED | SKIPPED_PAUSED | SKIPPED_OPTOUT
+  /// SENT means Discord's API accepted the message (200/204) and nothing else. It is never
+  /// written for a message that was not really handed to Discord: a mock run records MOCKED and
+  /// a suppressed send records its own SKIPPED_* reason, so no counter can round them up.
+  /// See `wasDmAttempted()` in src/lib/discord-link.ts.
   outcome     String
   /// Discord's own JSON error code, e.g. 50007 "Cannot send messages to this user".
   discordCode Int?

@@ -30,10 +30,20 @@ process.env.CS2_WEBHOOK_KEY = 'e2e-cs2-webhook-key';
 // the bot callbacks self-hide (null / 503) when these are unset, exactly like push with no
 // VAPID keys, so every assertion would otherwise pass for the wrong reason. Test-only values —
 // no real guild, no real invite, and deliberately NOT the CS2 key (that one goes to a game
-// server). No DISCORD_BOT_TOKEN: the DM probe stays on its mock path, which is the point.
+// server).
 process.env.SUMMIT_BOT_KEY = 'e2e-summit-bot-key';
 process.env.DISCORD_GUILD_ID = '000000000000000001';
 process.env.DISCORD_INVITE_URL = 'https://discord.gg/e2e-6614gamers';
+// A placeholder token, because `isDiscordLinkConfigured()` requires one: without the token the
+// app cannot open a DM channel at all, so the card hides rather than walking a kid through
+// three steps for a link that can never deliver. Nothing dials Discord with this string —
+// NEXT_PUBLIC_STRATEGY_3_MOCK above is the *only* thing that selects the mock probe, and the
+// mock records MOCKED, never SENT.
+process.env.DISCORD_BOT_TOKEN = 'e2e-placeholder-bot-token';
+// The hard master switch (§5) ships false. The suite flips it on, or every probe would record
+// SKIPPED_DISABLED and the BLOCKED path — the one that decides whether a marshal walks — would
+// never be exercised.
+process.env.DISCORD_DM_ENABLED = 'true';
 // One snowflake the mock DM probe refuses with Discord's real 50007, so the BLOCKED path —
 // the one that decides whether a marshal walks to a seat — is assertable without a token.
 process.env.DISCORD_DM_MOCK_BLOCKED = '300000000000000900';
