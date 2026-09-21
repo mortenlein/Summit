@@ -37,7 +37,7 @@ test('the register panel’s seat editor writes the seat through to the player r
   const { tournamentId, playerId } = await leoRegistered('Seat Register Cup', 'B12');
   await loginAs(page, 'leo');
   await page.goto(`/tournaments/${tournamentId}/register`);
-  await expect(page.getByRole('heading', { name: 'Your Team' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Leo Legion' })).toBeVisible();
 
   const editor = seatEditor(page);
   await editor.open(/^Edit$/);
@@ -94,7 +94,7 @@ test('Escape abandons a seat edit without writing anything', async ({ page }) =>
   const { tournamentId, playerId } = await leoRegistered('Seat Escape Cup', 'B12');
   await loginAs(page, 'leo');
   await page.goto(`/tournaments/${tournamentId}/register`);
-  await expect(page.getByRole('heading', { name: 'Your Team' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Leo Legion' })).toBeVisible();
 
   const editor = seatEditor(page);
   await editor.open(/^Edit$/);
@@ -111,7 +111,7 @@ test('saving an empty seat clears it rather than storing a blank', async ({ page
   const { tournamentId, playerId } = await leoRegistered('Seat Clear Cup', 'B12');
   await loginAs(page, 'leo');
   await page.goto(`/tournaments/${tournamentId}/register`);
-  await expect(page.getByRole('heading', { name: 'Your Team' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Leo Legion' })).toBeVisible();
 
   const editor = seatEditor(page);
   await editor.open(/^Edit$/);

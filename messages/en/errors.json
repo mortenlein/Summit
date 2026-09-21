@@ -9,7 +9,7 @@
   "roster_locked_identity": "Roster changes are locked. Seat, name, nickname and flag edits are still allowed; Steam ID and leader changes need roster edits unlocked.",
   "seeding_locked": "Seeding is locked while the bracket is in play. Name and logo edits are still allowed.",
   "bracket_locked": "Bracket changes are locked. Unlock roster edits in tournament settings before regenerating matches.",
-  "player_move_locked": "The bracket is live — ask an organizer to move you.",
+  "player_move_locked": "The bracket is live — ask someone on the crew to move you.",
   "signups_disabled": "Steam signups are disabled for this tournament",
   "registration_locked": "Registration is currently locked for this tournament",
   "team_name_required": "Team name is required",
