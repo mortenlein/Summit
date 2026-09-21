@@ -19,6 +19,7 @@
     "matches": "{count, plural, one {# kamp} other {# kamper}}",
     "liveNow": "Live nå",
     "share": "Del",
+    "shareLink": "Del lenke",
     "registerTeam": "Meld på lag"
   },
   "share": {
@@ -31,7 +32,7 @@
     "back": "Tilbake til turneringer"
   },
   "bracket": {
-    "panHint": "Dra for å flytte, knip for å zoome. Trykk på en kamp for detaljer.",
+    "panHint": "Dra for å flytte, knip for å zoome.",
     "open": "Åpne bracketen"
   },
   "leaderboard": {
@@ -87,9 +88,7 @@
   "registry": {
     "searchPlaceholder": "Søk etter lag …",
     "seed": "Seeding <n>{seed}</n>",
-    "seedEmpty": "Seeding —",
     "playerBadge": "{count, plural, one {# SPILLER} other {# SPILLERE}}",
-    "details": "Detaljer",
     "noMatch": "Ingen treff på «{search}».",
     "empty": "Ingen lag påmeldt ennå."
   },

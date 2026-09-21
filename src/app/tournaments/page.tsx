@@ -27,6 +27,11 @@ export default async function TournamentsOverview() {
               teamSize: true,
               format: true,
               createdAt: true,
+              // The route selects this and returns it, and the stage now depends on it: a
+              // tournament with sign-up open is in REGISTRATION however few teams have joined.
+              // Missing here, the server-rendered board called every open tournament a draft
+              // and then silently corrected itself on the first refetch.
+              steamSignupEnabled: true,
               teams: { select: { id: true } },
               matches: { select: { status: true } },
               // The route returns `_count`, and the directory card prints the team count from
@@ -37,7 +42,7 @@ export default async function TournamentsOverview() {
       });
       const tournaments = rows.map(({ teams, matches, ...tournament }) => ({
           ...tournament,
-          stage: getTournamentStage(teams, matches),
+          stage: getTournamentStage(teams, matches, tournament.steamSignupEnabled),
       }));
       return { tournaments };
     }

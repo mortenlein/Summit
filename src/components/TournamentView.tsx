@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { Trophy, Users, X, Gamepad2, MoreHorizontal, Command } from "lucide-react";
+import { Trophy, Users, X, Gamepad2, MoreHorizontal, Command, Share2 } from "lucide-react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -183,6 +183,33 @@ export default function TournamentView({ id }: TournamentViewProps) {
     );
   }
 
+  /**
+   * Share the page.
+   *
+   * `navigator.share` where the platform has it — which is every phone this will be opened on,
+   * and it is what makes moving this control into the "Mer" sheet a net win rather than a
+   * demotion: one extra tap buys the real share sheet instead of a clipboard copy a kid then
+   * has to paste somewhere. Clipboard is the fallback, and an abort (they closed the sheet) is
+   * not an error.
+   */
+  const handleShare = async () => {
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title: tournament?.name || "Summit", url });
+        return;
+      } catch (error: any) {
+        if (error?.name === "AbortError") return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success(t("share.copiedTitle"), t("share.copiedBody"));
+    } catch {
+      // A browser that refuses both is one the kid can still copy the address bar from.
+    }
+  };
+
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden bg-page antialiased text-fg">
       <TournamentHero
@@ -191,10 +218,9 @@ export default function TournamentView({ id }: TournamentViewProps) {
         matchesCount={matches.length}
         liveMatchesCount={liveMatches.length}
         gameMeta={gameMeta}
-        onShare={() => {
-          navigator.clipboard.writeText(window.location.href);
-          toast.success(t("share.copiedTitle"), t("share.copiedBody"));
-        }}
+        activeTab={activeTab}
+        onGoToLive={liveMatches.length > 0 ? () => handleTabChange("overview") : undefined}
+        onShare={handleShare}
       />
 
       {/* The only tournament navigation on desktop; phones get the bottom bar below. */}
@@ -221,16 +247,30 @@ export default function TournamentView({ id }: TournamentViewProps) {
 
             {activeTab === "bracket" && tournament.category !== 'BATTLE_ROYALE' && (
               <div className="animate-in fade-in duration-500">
-                {/* Shorter on a phone so the canvas isn't mostly empty space around a bracket
-                    that fitView has already had to shrink to fit the width. */}
-                <div className="mds-card h-[52vh] min-h-[340px] overflow-hidden p-0 lg:h-[68vh]">
-                  <PublicBracket
-                    tournamentId={id}
-                    matches={matches}
-                    onMatchClick={(matchId: string) => setSelectedMatch(matches.find((m: any) => m.id === matchId))}
-                  />
-                </div>
-                <p className="m-0 mt-2 text-xs text-fg-subtle lg:hidden">{t("bracket.panHint")}</p>
+                {/* This tab had no empty guard at all, so before the draw it rendered an empty
+                    grid and then instructed the kid to pinch it. */}
+                {matches.length === 0 ? (
+                  <div className="mds-card flex min-h-[220px] flex-col items-center justify-center gap-2 p-8 text-center">
+                    <Trophy size={26} className="text-fg-subtle" />
+                    <p className="m-0 text-sm text-fg-muted">{t("overview.notGenerated")}</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Taller than it was: the canvas no longer shrinks the bracket to fit, so
+                        the height is what decides how much of it a kid sees at once. */}
+                    <div className="mds-card h-[60vh] min-h-[420px] overflow-hidden p-0 lg:h-[68vh]">
+                      <PublicBracket
+                        tournamentId={id}
+                        matches={matches}
+                        onMatchClick={(matchId: string) => setSelectedMatch(matches.find((m: any) => m.id === matchId))}
+                      />
+                    </div>
+                    {/* The "tap a match for details" half is gone — the node has a pressed state
+                        now, which says it better than a sentence. The pan clause stays: the tree
+                        deliberately overflows, and nothing else on the canvas admits that. */}
+                    <p className="m-0 mt-2 text-xs text-fg-subtle lg:hidden">{t("bracket.panHint")}</p>
+                  </>
+                )}
               </div>
             )}
 
@@ -444,6 +484,20 @@ export default function TournamentView({ id }: TournamentViewProps) {
                   </button>
                 );
               })}
+              {/* Above the palette row on purpose: sharing a link is a thing a kid does, and
+                  the palette is a thing the crew does. */}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMobileTabSheet(false);
+                  void handleShare();
+                }}
+                data-testid="tournament-share"
+                className="mds-nav-link w-full text-left"
+              >
+                <Share2 size={16} className="text-fg-subtle" />
+                <span>{t("hero.shareLink")}</span>
+              </button>
               <button
                 type="button"
                 onClick={() => {

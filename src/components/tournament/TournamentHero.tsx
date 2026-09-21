@@ -14,6 +14,10 @@ interface TournamentHeroProps {
   liveMatchesCount: number;
   gameMeta: any;
   onShare: () => void;
+  /** Which tab is showing. The live pill is tab-aware, not breakpoint-aware — see below. */
+  activeTab: string;
+  /** Where the live pill jumps to. Omitted when nothing is live. */
+  onGoToLive?: () => void;
 }
 
 /**
@@ -28,6 +32,8 @@ export function TournamentHero({
   liveMatchesCount,
   gameMeta,
   onShare,
+  activeTab,
+  onGoToLive,
 }: TournamentHeroProps) {
   const t = useTranslations("tournament");
   const tStage = useTranslations("stage");
@@ -75,22 +81,43 @@ export function TournamentHero({
                   <span>{format}</span>
                 </>
               ) : null}
-              <span aria-hidden>·</span>
-              <span className="mds-numeric">{t("hero.teams", { count: teamsCount })}</span>
-              <span aria-hidden>·</span>
-              <span className="mds-numeric">{t("hero.matches", { count: matchesCount })}</span>
+              {/* Game and format at every width: "Enkel utslagning" is the only public sentence
+                  that tells a kid one loss ends their night. The two counts are desktop-only —
+                  every tab below states them in a form you can act on, and on a 390px header
+                  this line was four segments deep before the tournament's own name had room. */}
+              <span className="hidden sm:inline" aria-hidden>·</span>
+              <span className="mds-numeric hidden sm:inline">
+                {t("hero.teams", { count: teamsCount })}
+              </span>
+              <span className="hidden sm:inline" aria-hidden>·</span>
+              <span className="mds-numeric hidden sm:inline">
+                {t("hero.matches", { count: matchesCount })}
+              </span>
             </p>
           </div>
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-          {liveMatchesCount > 0 && (
-            <span className="mds-uppercase-label flex items-center gap-2 rounded-full border border-danger px-3 py-1 text-[10px] text-danger">
-              <span className="h-1.5 w-1.5 rounded-full bg-danger animate-pulse" />
+          {/* Tab-aware, not breakpoint-aware. On Oversikt the section header 35px below says
+              "SPILLES NÅ" with the team names attached, so the pill is pure repetition there —
+              but on Lag and Spillere it is the only live signal on the screen, and a
+              `hidden lg:flex` gate would have deleted it from exactly the phone that needs it.
+              Borderless and still, matching that section header: a pulsing outlined pill and a
+              pulsing dot in the same viewport are two alarms for one fact. It is a button now,
+              so the thing it announces is one tap away. */}
+          {liveMatchesCount > 0 && activeTab !== "overview" && (
+            <button
+              type="button"
+              onClick={onGoToLive}
+              className="mds-uppercase-label mds-tap flex items-center gap-2 rounded-sm px-1 text-[10px] text-danger transition-colors hover:bg-tint"
+            >
+              <span className="mds-dot is-live" aria-hidden />
               {t("hero.liveNow")}
-            </span>
+            </button>
           )}
-          <button onClick={onShare} className="mds-btn-secondary h-9 px-4 text-xs">
+          {/* Share is desktop-only here; below `lg` it lives in the "Mer" sheet, where a kid can
+              find it beside the other things this page can do. */}
+          <button onClick={onShare} className="mds-btn-secondary hidden h-9 px-4 text-xs lg:inline-flex">
             <Share2 size={14} />
             {t("hero.share")}
           </button>

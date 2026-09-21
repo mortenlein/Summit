@@ -19,6 +19,7 @@
     "matches": "{count} matches",
     "liveNow": "Live now",
     "share": "Share",
+    "shareLink": "Share link",
     "registerTeam": "Register team"
   },
   "share": {
@@ -31,7 +32,7 @@
     "back": "Back to Tournaments"
   },
   "bracket": {
-    "panHint": "Drag to pan, pinch to zoom. Tap a match for the detail.",
+    "panHint": "Drag to move, pinch to zoom.",
     "open": "Open bracket view"
   },
   "leaderboard": {
@@ -87,9 +88,7 @@
   "registry": {
     "searchPlaceholder": "Search teams...",
     "seed": "Seed <n>{seed}</n>",
-    "seedEmpty": "Seed —",
     "playerBadge": "{count} PLAYERS",
-    "details": "Details",
     "noMatch": "No teams match “{search}”.",
     "empty": "No teams signed up yet."
   },

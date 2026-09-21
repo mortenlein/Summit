@@ -44,6 +44,7 @@
   "teamName": "Lagnavn",
   "teamNamePlaceholder": "Skriv et unikt lagnavn",
   "teamLogo": "Laglogo (valgfritt)",
+  "addTeamLogo": "Legg til laglogo",
   "uploadHint": "Last opp PNG eller JPG",
   "rosterCount": "Spillere ({count})",
   "playerLabel": "Spiller {index}",

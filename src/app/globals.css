@@ -527,10 +527,15 @@ h3 { font-size: var(--fs-title); margin-bottom: 0.75rem; }
   line-height: 0.95;
 }
 
+/*
+ * Body size, not lead. The landing page is this rule's only consumer, and the sentence under
+ * it is one line addressed to a 12-year-old — at lead size it read as a pitch aimed over their
+ * head at whoever might buy the product.
+ */
 .workspace-subtitle {
   margin-top: 0.65rem;
   max-width: 52rem;
-  font-size: var(--fs-lead);
+  font-size: var(--fs-body);
   color: var(--mds-text-muted);
 }
 

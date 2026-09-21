@@ -93,7 +93,10 @@ export function MatchList({ matches, tournamentId }: MatchListProps) {
             <div className="flex items-center gap-4">
               {/* The stage a spectator knows the round by, not "Round 3". */}
               <h2 className="m-0 text-base font-bold tracking-tight">{label}</h2>
-              <div className="h-px flex-1 bg-line" />
+              {/* Desktop only. `space-y-10` between stages against `space-y-4` within them
+                  already states the boundary on a single-column phone, and a full-width rule
+                  under every stage heading is eight more horizontal lines to scroll past. */}
+              <div className="hidden h-px flex-1 bg-line md:block" />
             </div>
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">

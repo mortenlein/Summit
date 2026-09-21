@@ -64,10 +64,16 @@ export function TournamentOverview({
       {/* What is happening right now — the reason a spectator opened the page. */}
       {liveMatches.length > 0 && (
         <section className="space-y-4">
+          {/* The same flat rule "NESTE KAMPER" uses forty lines down, and a still dot. A red
+              gradient hairline plus a pulsing dot plus the cards' own red borders was four
+              statements of "live" stacked in one viewport; the cards are the loud one. The
+              section head is never gated on how many matches are live — structure that appears
+              and disappears between page loads is worse for a glancing kid than structure that
+              is always in the same place. */}
           <div className="flex items-center gap-3">
-            <span className="h-1.5 w-1.5 rounded-full bg-danger animate-pulse" />
+            <span className="mds-dot is-live" aria-hidden />
             <h2 className="mds-uppercase-label m-0 text-danger">{t("hero.liveNow")}</h2>
-            <div className="h-px flex-1 bg-gradient-to-r from-danger to-transparent" />
+            <div className="h-px flex-1 bg-line" />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {liveMatches.map((match: any) => (
@@ -120,9 +126,14 @@ export function TournamentOverview({
             {/* Where the bracket actually is, instead of a decorative "29%" progress bar. */}
             <p className="m-0 mt-1 text-sm text-fg-muted">{stageLine}</p>
           </div>
+          {/* Once a bracket exists, the Lag tab holds this properly and the phone does not need
+              a second copy of it above the fold. Before that, these chips are the only content
+              on the tab — so the gate is `matches.length > 0`, never the breakpoint alone. */}
           <button
             onClick={() => onSetTab("teams")}
-            className="mds-btn-secondary h-9 shrink-0 px-4 text-xs"
+            className={`mds-btn-secondary h-9 shrink-0 px-4 text-xs ${
+              matches.length > 0 ? "hidden lg:inline-flex" : "inline-flex"
+            }`}
           >
             {t("overview.viewAllTeams")}
             <ArrowRight size={14} />
@@ -144,7 +155,11 @@ export function TournamentOverview({
             uploaded one, it is gone for all of them; if any did, it is held empty for all.
             Deciding chip by chip is what ships a ragged left edge down three columns. The chips
             are also taller than they were, because at ~36px they were under a thumb. */}
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        <div
+          className={`grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3 ${
+            matches.length > 0 ? "hidden lg:grid" : ""
+          }`}
+        >
           {teams.map((team: any) => (
             <button
               key={team.id}

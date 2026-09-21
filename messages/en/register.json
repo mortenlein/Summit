@@ -44,6 +44,7 @@
   "teamName": "Team name",
   "teamNamePlaceholder": "Enter unique team name",
   "teamLogo": "Team logo (optional)",
+  "addTeamLogo": "Add a team logo",
   "uploadHint": "Upload PNG or JPG",
   "rosterCount": "{count, plural, one {Roster (# player)} other {Roster (# players)}}",
   "playerLabel": "Player {index}",

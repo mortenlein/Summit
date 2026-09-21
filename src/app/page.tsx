@@ -167,6 +167,7 @@ export default async function Home() {
         game: true,
         format: true,
         teamSize: true,
+        steamSignupEnabled: true,
         teams: { select: { id: true } },
         matches: { select: { status: true } },
       },
@@ -189,6 +190,9 @@ export default async function Home() {
 
   const signedIn = Boolean(steamId);
 
+  // The true totals, before the board's display cap. The hero used to count the *sliced* list,
+  // so a LAN with seven matches running announced six.
+  const liveTotal = floorMatches.filter((m) => isLive(m.status)).length;
   const liveMatches = floorMatches.filter((m) => isLive(m.status)).slice(0, FLOOR_LIMIT);
   const calledMatches = floorMatches
     .filter((m) => !isLive(m.status))
@@ -197,7 +201,7 @@ export default async function Home() {
   // `row`, not `t`: `t` is the translator in this scope.
   const cards = tournaments
     .map((row) => {
-      const stage = getTournamentStage(row.teams, row.matches);
+      const stage = getTournamentStage(row.teams, row.matches, row.steamSignupEnabled);
       const gameMeta = getGameMetadata(row.game);
       const done = row.matches.filter((m) => DONE_STATUSES.includes(String(m.status || '').toUpperCase())).length;
       return {
@@ -215,6 +219,10 @@ export default async function Home() {
     // Live tournaments first: what is running now outranks what was created most recently.
     .sort((a, b) => (a.stage === "LIVE" ? 0 : 1) - (b.stage === "LIVE" ? 0 : 1));
 
+  // Same rule as the directory, so the two boards do not diverge: the game eyebrow only earns
+  // its row when the board actually holds more than one game.
+  const multiGameBoard = new Set(tournaments.map((row) => row.game)).size > 1;
+
   return (
     <div className="flex min-h-screen flex-col bg-page text-fg">
       {/* No eyebrow. It was the literal "CS2 LAN-TURNERINGER" while games.ts ships five games
@@ -228,10 +236,15 @@ export default async function Home() {
         }
         subtitle={t("subtitle")}
         meta={
-          liveMatches.length > 0 ? (
-            <span className="mds-tabular inline-flex items-center gap-2 text-body font-semibold text-live">
-              <span className="mds-dot is-live" aria-hidden />
-              {t("playingNow", { count: liveMatches.length })}
+          // Nothing while something is live: the red-dotted "SPILLES NÅ" heading and the
+          // scorebug below own that job on the same screen, with the team names attached.
+          //
+          // The slot is kept for the quiet states, and the lie it used to tell is fixed: with
+          // no live match but a called one it printed "Ingen kamper spilles akkurat nå" while a
+          // KALT OPP section rendered underneath.
+          liveTotal > 0 ? undefined : calledMatches.length > 0 ? (
+            <span className="text-body font-semibold text-fg-muted">
+              {t("calledNotLive", { count: calledMatches.length })}
             </span>
           ) : (
             <span className="text-body font-semibold text-fg-subtle">
@@ -285,11 +298,6 @@ export default async function Home() {
                   {liveMatches.length > 0 ? t("floorHeadingLive") : t("floorHeadingCalled")}
                 </h2>
               </div>
-              {calledMatches.length > 0 && liveMatches.length > 0 && (
-                <p className="mds-uppercase-label text-fg-subtle">
-                  {t("moreCalled", { count: calledMatches.length })}
-                </p>
-              )}
             </div>
 
             {liveMatches.length > 0 && (
@@ -301,10 +309,19 @@ export default async function Home() {
             )}
 
             {calledMatches.length > 0 && (
-              <div className="mds-card-grid">
-                {calledMatches.map((m) => (
-                  <MatchLine key={m.id} match={m} tone="next" />
-                ))}
+              <div className="space-y-3">
+                {/* The word, above the cards it describes. It used to be a right-aligned count
+                    about 250px higher, next to a heading about a different set of matches. */}
+                {liveMatches.length > 0 && (
+                  <h3 className="mds-uppercase-label m-0 text-fg-subtle">
+                    {t("floorHeadingCalled")}
+                  </h3>
+                )}
+                <div className="mds-card-grid">
+                  {calledMatches.map((m) => (
+                    <MatchLine key={m.id} match={m} tone="next" />
+                  ))}
+                </div>
               </div>
             )}
           </section>
@@ -352,7 +369,7 @@ export default async function Home() {
                   <TournamentCard
                     href={`/tournaments/${card.id}`}
                     name={card.name}
-                    game={card.game}
+                    game={multiGameBoard ? card.game : undefined}
                     format={card.format}
                     roster={card.roster}
                     teamCount={card.teamCount}

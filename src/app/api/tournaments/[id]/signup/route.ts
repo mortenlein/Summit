@@ -91,7 +91,15 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
                 return tx.team.create({
                     data: {
                         name: trimmedTeamName,
-                        logoUrl: logoUrl,
+                        // Same default as the organizer-side team route: a generated initials
+                        // mark when nobody uploaded one. Self-signup skipped this, so a null
+                        // logoUrl reached the bracket and the OBS overlay — and the register
+                        // form no longer puts the upload in a kid's path, so the skip rate is
+                        // about to be most of them.
+                        logoUrl:
+                            typeof logoUrl === 'string' && logoUrl.trim() !== ''
+                                ? logoUrl
+                                : `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(trimmedTeamName)}`,
                         tournamentId,
                         inviteCode: uuidv4().slice(0, 8),
                         players: {

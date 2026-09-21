@@ -31,6 +31,7 @@
   "liveMatches": "Live matches",
   "matchesLive": "{count, plural, one {# match live} other {# matches live}}",
   "matchesPlayed": "Matches played",
+  "playedOf": "{done}/{total} played",
   "watchLive": "Watch live",
   "openTournament": "Open tournament",
   "goHome": "Go Home",

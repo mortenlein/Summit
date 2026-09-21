@@ -148,6 +148,8 @@ export default function RegisterClient(props: {
     });
     const [logoFile, setLogoFile] = useState<File | null>(null);
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
+    /** The logo field is opt-in — see the disclosure in the create-team form. */
+    const [showLogoField, setShowLogoField] = useState(false);
     const [userTeam, setUserTeam] = useState<any>(null);
     const sessionSteamId = (session?.user as any)?.steamId as string | undefined;
     const isSignedIn = Boolean(session?.user);
@@ -678,6 +680,38 @@ export default function RegisterClient(props: {
                         placeholder={t('teamNamePlaceholder')}
                     />
 
+                    {/* Seat for the registering player. Optional, but the LAN runs on it:
+                        the signup route stores it on this player's own row. */}
+                    {tournament?.steamSignupEnabled && (
+                        <div className="max-w-[14rem]">
+                            <Input
+                                id="create-seating"
+                                label={t('seatOptional')}
+                                hint={tPlayer('seat.helper')}
+                                type="text"
+                                value={seating}
+                                maxLength={SEAT_MAX_LENGTH}
+                                onChange={(e) => setSeating(e.target.value)}
+                                className="mds-numeric h-11 px-4 text-sm font-bold"
+                                placeholder={tPlayer('seat.placeholder')}
+                            />
+                        </div>
+                    )}
+
+                    {/* Behind a link, after the seat. A file picker labelled "LAGLOGO
+                        (VALGFRITT)" sat between the team name and the seat — the one field on
+                        this form the LAN actually runs on — and most kids do not have a logo to
+                        pick. A team that skips it gets a generated initials mark server-side, so
+                        the bracket and the overlay never show a hole. */}
+                    {!showLogoField ? (
+                        <button
+                            type="button"
+                            onClick={() => setShowLogoField(true)}
+                            className="self-start rounded-sm text-meta font-semibold text-brand hover:underline"
+                        >
+                            {t('addTeamLogo')}
+                        </button>
+                    ) : (
                     <div className="space-y-1.5">
                         <label className="mds-uppercase-label" htmlFor="team-logo">
                             {t('teamLogo')}
@@ -712,23 +746,6 @@ export default function RegisterClient(props: {
                             </div>
                         </div>
                     </div>
-
-                    {/* Seat for the registering player. Optional, but the LAN runs on it:
-                        the signup route stores it on this player's own row. */}
-                    {tournament?.steamSignupEnabled && (
-                        <div className="max-w-[14rem]">
-                            <Input
-                                id="create-seating"
-                                label={t('seatOptional')}
-                                hint={tPlayer('seat.helper')}
-                                type="text"
-                                value={seating}
-                                maxLength={SEAT_MAX_LENGTH}
-                                onChange={(e) => setSeating(e.target.value)}
-                                className="mds-numeric h-11 px-4 text-sm font-bold"
-                                placeholder={tPlayer('seat.placeholder')}
-                            />
-                        </div>
                     )}
 
                 </Card>

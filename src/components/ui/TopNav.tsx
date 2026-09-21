@@ -96,10 +96,13 @@ export function TopNav() {
                 ) : null}
                 <span className="mds-name hidden text-meta text-fg-muted lg:block">{user?.name}</span>
               </div>
+              {/* `md:flex`, not `lg:flex`. The nav links go inline at `md` and the drawer that
+                  held sign-out disappears with them, so between 768 and 1023px there was no way
+                  to sign out at all — on the only shared laptop the crew table has. */}
               <button
                 type="button"
                 onClick={() => void handleSignOut()}
-                className="hidden items-center gap-1.5 rounded-sm px-1 text-meta font-semibold text-fg-muted transition-colors hover:text-fg lg:flex"
+                className="hidden items-center gap-1.5 rounded-sm px-1 text-meta font-semibold text-fg-muted transition-colors hover:text-fg md:flex"
               >
                 <LogOut size={14} aria-hidden />
                 {tc('signOut')}
@@ -129,8 +132,16 @@ export function TopNav() {
           >
             <Command size={17} aria-hidden />
           </button>
+          {/* Language stays in the bar, borderless. The kid who needs it is exactly the kid who
+              cannot read the drawer it would hide in — but it does not need a box of its own to
+              say so, and the ⌘/☰ glyphs beside it have none. */}
           <LocaleToggle />
-          <ThemeToggle />
+          {/* Theme moved into the drawer: it cannot know the stored theme on the server, so it
+              renders a placeholder until mount, and that placeholder was an empty bordered box
+              sitting in the header on every single first paint. */}
+          <div className="hidden md:block">
+            <ThemeToggle />
+          </div>
           <button
             type="button"
             aria-label={t('toggleMenu')}
@@ -168,6 +179,10 @@ export function TopNav() {
                 {l.label}
               </Link>
             ))}
+            <div className="mt-1 flex items-center justify-between rounded-sm px-3 py-2">
+              <span className="text-body font-semibold text-fg-muted">{t('toggleTheme')}</span>
+              <ThemeToggle />
+            </div>
             {signedIn ? (
               <button
                 type="button"

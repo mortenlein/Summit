@@ -34,7 +34,25 @@ Deviations from this plan, all deliberate and all noted in the commit that made 
 - **§5's "bigger question"** — merging `/profile` into the desk — is **not** taken. It is a
   structural change with three named preconditions, and none of them is a clutter fix.
 
-**Tier 2 (53 shrink) has not been started.**
+**Tier 2 shipped** on branch `kid-clutter-tier2`, 2026-09-21, in four commits. Full suite green
+at 260 after each. Deviations, all deliberate:
+
+- **The `TopNav` `md:hidden` gap was closed by showing sign-out from `md`**, not by pushing the
+  drawer to `lg:hidden`. The drawer at `md` would have sat beside the inline nav links it
+  duplicates.
+- **The teams-tab card button carries no `aria-label`.** The plan asked for
+  `aria-label="{team.name} – detaljer"`, but that becomes the *heading's* accessible name too,
+  so the heading announced "Seed 7 – detaljer" and `getByRole('heading', {name})` stopped
+  matching. A button whose name is the team, inside the heading, announces as "Seed 7, button".
+- **The bracket container height is a taller fixed viewport fraction**, not measured from the
+  bracket. With `minZoom` at 0.8 the tree overflows by design, so height decides how much is
+  visible rather than how much exists.
+- **`getTournamentStage` gained a `signupOpen` argument** rather than the landing page filtering
+  on `!steamSignupEnabled`. The plan's own reasoning — a published tournament must not read as a
+  draft — applies to the derivation itself, so fixing it there fixes both boards and the badge.
+- **Not taken:** the `/profile` → desk merge (§5's "bigger question", still structural, still
+  not a clutter fix) and an edge affordance on the bracket canvas — the pan clause stays in the
+  hint instead, as the plan requires when there is no affordance.
 
 ---
 

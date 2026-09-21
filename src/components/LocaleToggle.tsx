@@ -38,6 +38,7 @@ export default function LocaleToggle() {
   };
 
   return (
+    // Borderless, to match the weight of the glyphs beside it in the header bar.
     <button
       type="button"
       onClick={() => void switchTo(next)}
@@ -45,7 +46,7 @@ export default function LocaleToggle() {
       data-testid="locale-toggle"
       aria-label={`${t("language")}: ${LOCALE_LABELS[locale]}`}
       title={`${t("language")} — ${LOCALE_LABELS[next]}`}
-      className="mds-tap flex h-9 items-center gap-1.5 rounded-sm border border-line bg-tint px-2 text-label font-semibold uppercase tracking-wide text-fg-muted transition-colors hover:border-line-hover hover:text-fg disabled:opacity-60"
+      className="mds-tap flex h-9 items-center gap-1.5 rounded-sm px-2 text-label font-semibold uppercase tracking-wide text-fg-muted transition-colors hover:bg-tint hover:text-fg disabled:opacity-60"
     >
       <Globe size={15} aria-hidden />
       {locale.toUpperCase()}

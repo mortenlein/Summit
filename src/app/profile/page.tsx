@@ -5,10 +5,11 @@ import { useTranslations } from 'next-intl';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowRight, Gamepad2, Loader2, LogOut, ShieldCheck, Zap } from 'lucide-react';
+import { ArrowRight, Gamepad2, Loader2, ShieldCheck, Zap } from 'lucide-react';
 import { Badge, Button, Card, EmptyState } from '@/components/ui';
 import { MockPersonaButtons } from '@/components/MockPersonaButtons';
 import { SeatEditor } from '@/components/player/SeatEditor';
+import { StateChip, useMyQueue } from '@/components/player/MyQueue';
 import { DiscordLinkCard } from '@/components/player/DiscordLinkCard';
 
 /**
@@ -37,6 +38,11 @@ export default function ProfilePage() {
         staleTime: 60_000,
     });
 
+    // The queue, not the profile payload: `view=profile` skips `activeMatches` entirely, so the
+    // counter this replaces was structurally unable to say "you are being called right now".
+    // Above the early return, because hooks cannot sit behind one.
+    const { data: queue } = useMyQueue({ enabled: status === 'authenticated' });
+
     if (status === 'unauthenticated') {
         return (
             <div className="flex min-h-screen flex-col items-center justify-center gap-8 bg-page p-8 text-center">
@@ -57,22 +63,21 @@ export default function ProfilePage() {
     }
 
     const loading = status === 'loading' || (status === 'authenticated' && isLoading);
-    const { registrations = [], stats } = profile || {};
-    // ICU plurals, not an `n === 1 ?` pair: Norwegian counts differently and "1 turneringer"
-    // would be the first thing a player notices. The figure keeps its numeric face via <n>.
-    // One fact, not three. "3 turneringer" and "3 plasser" sat above a list of three cards each
-    // carrying its own tournament name and its own seat — the reader counts them by looking.
-    // Open matches is the only signal on this page that is not repeated below it.
-    const facts: { key: 'statOpenMatches'; n: number }[] = [
-        { key: 'statOpenMatches', n: stats?.activeMatches ?? 0 },
-    ];
+    const { registrations = [] } = profile || {};
+    const byTournament = new Map((queue?.queue ?? []).map((e) => [e.tournamentId, e]));
 
     return (
         <div className="min-h-screen bg-page text-fg">
             <main className="mds-container space-y-6 py-6 sm:py-8">
                 <header className="flex flex-wrap items-center gap-4">
-                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-line bg-card">
-                        {session?.user?.image ? (
+                    {/* The tile exists only when there is a picture in it. TopNav already does
+                        `image ? <Image/> : null`; this page was the deviation, framing a grey
+                        controller glyph in a bordered box. The slot is still reserved while the
+                        session resolves, so the name does not slide sideways on hydration. */}
+                    {status === 'loading' ? (
+                        <div className="h-14 w-14 shrink-0 animate-pulse rounded-lg bg-white/5" />
+                    ) : session?.user?.image ? (
+                        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg">
                             <Image
                                 src={session.user.image}
                                 alt=""
@@ -80,12 +85,8 @@ export default function ProfilePage() {
                                 height={56}
                                 className="h-full w-full object-cover"
                             />
-                        ) : (
-                            <span className="flex h-full w-full items-center justify-center text-fg-subtle">
-                                <Gamepad2 size={22} />
-                            </span>
-                        )}
-                    </div>
+                        </div>
+                    ) : null}
                     {/* A floor, not just flex-1: with `min-w-0` alone this column collapses to a
                         few pixels on a phone whenever the badge and the sign-out button happen to
                         fit beside it, and the player's own name wraps one letter per line. The
@@ -101,41 +102,6 @@ export default function ProfilePage() {
                         ) : (
                             <div className="h-8 w-40 animate-pulse rounded-sm bg-white/5" />
                         )}
-                        <p className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-fg-muted">
-                            {/* Counts of nothing are noise — the empty state below says it better. */}
-                            {registrations.length > 0 &&
-                                facts.map((f) => (
-                                    <span key={f.key}>
-                                        {t.rich(`profile.${f.key}`, {
-                                            count: f.n,
-                                            n: (chunks) => (
-                                                <span className="mds-numeric font-bold text-fg">{chunks}</span>
-                                            ),
-                                        })}
-                                    </span>
-                                ))}
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        {/* No "Steam tilkoblet" chip. It was unconditional, so a Discord sign-in
-                            was told it was connected to Steam — and `tone="ready"` is this app's
-                            "din tur" green. A permanent green chip on an account page spends
-                            that colour everywhere it actually means something. */}
-                        <Button
-                            variant="secondary"
-                            type="button"
-                            onClick={async () => {
-                                try {
-                                    await fetch('/api/auth/logout', { method: 'POST' });
-                                } catch {
-                                    // Best effort admin-cookie cleanup before NextAuth sign-out.
-                                }
-                                await signOut({ callbackUrl: '/' });
-                            }}
-                        >
-                            <LogOut size={15} />
-                            {tCommon('signOut')}
-                        </Button>
                     </div>
                 </header>
 
@@ -185,7 +151,10 @@ export default function ProfilePage() {
                                             className="mt-1.5 shrink-0 text-fg-subtle group-hover:text-brand"
                                         />
                                     </Link>
-                                    <Badge tone="neutral">{reg.team.tournament.game}</Badge>
+                                    {/* What the queue actually says about this tournament, not a
+                                        count that rendered "being called right now" and "three
+                                        rounds away" as the same number. */}
+                                    <StateChip entry={byTournament.get(reg.team.tournament.id)} />
                                 </div>
                                 <div className="grid grid-cols-2 gap-3 border-t border-line pt-3">
                                     <div className="min-w-0">
@@ -216,6 +185,29 @@ export default function ProfilePage() {
                         ))}
                     </div>
                 </section>
+
+                {/* Sign-out at the bottom, ghost weight, no icon. It was a bordered secondary
+                    button in the header, rendering heavier than the seat code — which is the
+                    highest-value string on this page and the one a kid actually came for.
+                    Nobody opens their profile to sign out. (Safe to demote only now: the header
+                    keeps its own sign-out from `md` up, and the drawer holds it below that.) */}
+                <div className="flex justify-end pt-2">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        onClick={async () => {
+                            try {
+                                await fetch('/api/auth/logout', { method: 'POST' });
+                            } catch {
+                                // Best effort admin-cookie cleanup before NextAuth sign-out.
+                            }
+                            await signOut({ callbackUrl: '/' });
+                        }}
+                    >
+                        {tCommon('signOut')}
+                    </Button>
+                </div>
             </main>
         </div>
     );

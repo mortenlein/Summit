@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useSession } from "next-auth/react";
 import { Loader2, Search, Gamepad2 } from "lucide-react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -39,6 +40,9 @@ export default function TournamentsOverviewClient() {
   const pathname = usePathname();
   const searchQuery = searchParams.get("search") || "";
   const stageFilter = (searchParams.get("stage") || "").toUpperCase();
+  const { data: session } = useSession();
+  const role = (session?.user as { role?: string } | undefined)?.role;
+  const isStaff = role === "admin" || role === "marshal";
 
   const { data, isLoading } = useQuery({
     queryKey: ["tournaments"],
@@ -55,20 +59,35 @@ export default function TournamentsOverviewClient() {
     router.replace(`${pathname}?${params.toString()}`);
   };
 
-  const matchesSearch = (row: DirectoryRow) =>
-    row.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    row.game.toLowerCase().includes(searchQuery.toLowerCase());
+  // Match the name the card *prints* as well as the enum behind it. The card showed
+  // "Counter-Strike 2" while this only tested `row.game` ("CS2"), so a kid typing "counter" got
+  // the no-results state for a board full of Counter-Strike.
+  const matchesSearch = (row: DirectoryRow) => {
+    const q = searchQuery.toLowerCase();
+    if (!q) return true;
+    return (
+      row.name.toLowerCase().includes(q) ||
+      row.game.toLowerCase().includes(q) ||
+      (getGameMetadata(row.game)?.name || "").toLowerCase().includes(q)
+    );
+  };
 
   const searched = tournaments.filter(matchesSearch);
+  /** More than one game on the *unfiltered* board, so the eyebrow says something. */
+  const multiGame = new Set(tournaments.map((row) => row.game)).size > 1;
   const filtered = stageFilter
     ? searched.filter((row) => String(row.stage || "").toUpperCase() === stageFilter)
     : searched;
 
   // Counts come from the data, so a filter is never offered for a bucket that is empty.
+  //
+  // UTKAST is filtered out for players: "draft" is organizer vocabulary for a tournament a kid
+  // cannot enter, offered as something to go and look at. The cards themselves stay, badge and
+  // all — a kid who scrolls past one should still see what it is; only the invitation goes.
   const stageCounts = STAGE_ORDER.map((stage) => ({
     stage,
     count: searched.filter((row) => String(row.stage || "").toUpperCase() === stage).length,
-  })).filter((s) => s.count > 0);
+  })).filter((s) => s.count > 0 && (isStaff || s.stage !== "DRAFT"));
 
   // Board order, not lifecycle order: what is being played outranks what someone might sign up
   // for, which outranks a draft nobody can enter, which outranks a tournament already decided.
@@ -82,6 +101,18 @@ export default function TournamentsOverviewClient() {
   // Is there anything on this server at all (before search/stage filtering)? If not, the
   // filter field and the stage chips are hidden: controls for a board that does not exist.
   const hasAny = tournaments.length > 0;
+  /**
+   * Both the search box and the chip row earn their space only on a board big enough to need
+   * them. Six is the threshold: below it every tournament is on screen already, and a filter
+   * over a list you can see is furniture.
+   *
+   * The `searchQuery` half of the search gate is not optional. Honouring `?search=` while
+   * hiding the input produces a board filtered to nothing, a "remove the filter" line, and no
+   * input to remove it in. And both gates test the PRE-filter length, never `filtered.length`,
+   * or the controls delete themselves mid-keystroke.
+   */
+  const showSearch = searched.length > 6 || searchQuery.length > 0;
+  const showChips = hasAny && searched.length > 6 && stageCounts.length > 1;
 
   return (
     <div className="flex min-h-screen flex-col bg-page text-fg">
@@ -91,7 +122,7 @@ export default function TournamentsOverviewClient() {
       <PageHeader
         title={tc("tournaments")}
         actions={
-          hasAny ? (
+          hasAny && showSearch ? (
             <div className="relative w-full sm:w-72">
               <label htmlFor="directory-filter" className="sr-only">
                 {t("filterLabel")}
@@ -115,7 +146,7 @@ export default function TournamentsOverviewClient() {
       />
 
       <main className="mds-container flex flex-1 flex-col gap-6 py-8">
-        {hasAny && (
+        {showChips && (
           <div className="mds-section-head">
             {/* No "TAVLA" heading. It was ~90px of a 358px row, read as a fourth chip that does
                 not tap, and in this app's Norwegian *tavla* is the crew board — so it pointed a
@@ -171,7 +202,7 @@ export default function TournamentsOverviewClient() {
                   <TournamentCard
                     href={`/tournaments/${row.id}`}
                     name={row.name}
-                    game={gameMeta?.name || row.game}
+                    game={multiGame ? gameMeta?.name || row.game : undefined}
                     format={row.format === "DOUBLE_ELIMINATION" ? "Double elim" : "Single elim"}
                     roster={teamSizeLabel(gameMeta, row.teamSize)}
                     teamCount={row._count?.teams ?? 0}
