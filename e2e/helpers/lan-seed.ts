@@ -675,3 +675,43 @@ export async function readDmAttempts(matchId: string) {
 export async function setDiscordDmPaused(tournamentId: string, discordDmPaused: boolean) {
   return prisma.tournament.update({ where: { id: tournamentId }, data: { discordDmPaused } });
 }
+
+let discordCounter = 0;
+
+// --- Discord reach fixtures (e2e/organizer-discord-reach.spec.ts) ---------------------------
+// The reach panel reads attempt rows rather than sending anything, so these plant the rows and
+// the bare users directly. `linkDiscord` above is shared with the DM specs — one helper, so a
+// link created for one suite is shaped identically to the other's.
+
+export interface DmAttemptOptions {
+  event?: string;
+  matchId?: string | null;
+  /** SENT | BLOCKED | UNKNOWN_USER | RATE_LIMITED | ERROR | SKIPPED_OPTOUT */
+  outcome: string;
+  discordCode?: number | null;
+  locale?: string;
+}
+
+/** A bare `User` row — the thing a `Player.userId` and a `DiscordLink` both hang off. */
+export async function createUserRow(name: string) {
+  discordCounter += 1;
+  const suffix = `${Date.now().toString(36)}-${discordCounter}`;
+  return prisma.user.create({
+    data: { name, email: `mock+reach-${suffix}@summit.local`, steamId: nextSteamId() },
+  });
+}
+
+/** One row of proof (or of refusal) that Discord answered about this user. */
+export async function recordDmAttempt(userId: string, discordId: string, options: DmAttemptOptions) {
+  return prisma.discordDmAttempt.create({
+    data: {
+      userId,
+      discordId,
+      event: options.event ?? 'LINK_PROBE',
+      matchId: options.matchId ?? null,
+      outcome: options.outcome,
+      discordCode: options.discordCode ?? null,
+      locale: options.locale ?? 'nb',
+    },
+  });
+}
