@@ -634,6 +634,11 @@ export async function readTeam(teamId: string) {
 export interface DiscordLinkOptions {
   discordId?: string;
   discordUsername?: string;
+  /**
+   * When the cache was last rewritten. Settable on its own so a test can build the nasty case:
+   * a fresh refusal in the cache sitting on top of an older accepted attempt.
+   */
+  dmCheckedAt?: Date;
   optOut?: boolean;
   dmState?: 'UNKNOWN' | 'SENT' | 'BLOCKED';
   dmChannelId?: string | null;
@@ -649,6 +654,7 @@ export async function linkDiscord(userId: string, options: DiscordLinkOptions = 
       userId,
       discordId,
       discordUsername: options.discordUsername ?? `player_${discordId}`,
+      dmCheckedAt: options.dmCheckedAt ?? null,
       optOut: options.optOut ?? false,
       dmState: options.dmState ?? 'UNKNOWN',
       dmChannelId: options.dmChannelId ?? null,
@@ -686,10 +692,16 @@ let discordCounter = 0;
 export interface DmAttemptOptions {
   event?: string;
   matchId?: string | null;
-  /** SENT | BLOCKED | UNKNOWN_USER | RATE_LIMITED | ERROR | SKIPPED_OPTOUT */
+  /**
+   * SENT | BLOCKED | UNKNOWN_USER | RATE_LIMITED | ERROR | SKIPPED_OPTOUT | SKIPPED_DISABLED
+   * | MOCKED. MOCKED is what a deployment that cannot talk to Discord writes — a row that proves a
+   * send was *not* made, which the panel must never count.
+   */
   outcome: string;
   discordCode?: number | null;
   locale?: string;
+  /** Back-date the evidence, to test which of two facts is the newer one. */
+  createdAt?: Date;
 }
 
 /** A bare `User` row — the thing a `Player.userId` and a `DiscordLink` both hang off. */
@@ -712,6 +724,7 @@ export async function recordDmAttempt(userId: string, discordId: string, options
       outcome: options.outcome,
       discordCode: options.discordCode ?? null,
       locale: options.locale ?? 'nb',
+      ...(options.createdAt ? { createdAt: options.createdAt } : {}),
     },
   });
 }

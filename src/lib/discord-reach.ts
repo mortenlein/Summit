@@ -1,4 +1,5 @@
 import prisma from '@/lib/prisma';
+import { discordDmMode, isDiscordDmSimulated, type DiscordSendMode } from '@/lib/discord-mode';
 
 /**
  * Who Discord can actually reach, for one tournament.
@@ -8,9 +9,20 @@ import prisma from '@/lib/prisma';
  * a `DiscordDmAttempt` row Discord itself wrote the outcome into. Nothing here may report a
  * player as notified on the strength of a `DiscordLink` alone.
  *
- * It is deliberately read-only and holds no send path: the app's sender (src/lib/discord.ts)
- * writes the attempt rows, this reads them back.
+ * It holds no send path — the app's sender (src/lib/discord.ts) does the talking — but it does
+ * hold no writer either: `sendDirectMessage` in `discord-dm.ts` writes every attempt row, and
+ * it is the only thing that may write SENT, because only it knows whether the transport really
+ * reached Discord (`DmTransport.real`). A second writer here would be a second place for a
+ * fake SENT to come from.
  */
+
+/**
+ * The only outcome that is proof. Everything else in the vocabulary
+ * (BLOCKED | UNKNOWN_USER | RATE_LIMITED | ERROR | SKIPPED_OPTOUT | SKIPPED_DISABLED | MOCKED)
+ * means Discord
+ * did not accept a message for this player, and none of them may ever be counted as reach.
+ */
+const PROOF_OF_SEND = 'SENT';
 
 /**
  * The remedy decides the state, which is why there are six and not two. An organizer reads this
@@ -86,6 +98,13 @@ export interface ReachSummary {
 export interface ReachReport {
   tournamentId: string;
   dmPaused: boolean;
+  /**
+   * Whether this deployment can talk to Discord at all. `SIMULATED` means no DM can leave the
+   * process right now, whatever the rows below say about the past — the panel has to show that,
+   * because "1 of 5 can be reached" read off an unconfigured deployment is the exact sentence
+   * this feature exists to stop anyone printing.
+   */
+  sendMode: DiscordSendMode;
   summary: ReachSummary;
   players: ReachPlayer[];
 }
@@ -99,6 +118,8 @@ type AttemptRow = {
 
 type LinkRow = {
   dmState: string;
+  /** When `dmState` was last rewritten by a send. Null on a link nothing has been tried for. */
+  dmCheckedAt: Date | null;
   optOut: boolean;
   discordUsername: string;
 };
@@ -123,10 +144,27 @@ export function reachStateFor(
 
   const outcome = lastAttempt?.outcome;
   if (outcome === 'BLOCKED' || outcome === 'UNKNOWN_USER') return 'LINKED_BLOCKED';
-  if (outcome === 'SENT') return 'LINKED_SENT';
-  // No attempt yet, or ERROR / RATE_LIMITED / SKIPPED_OPTOUT: nothing has been accepted for
-  // them. A link whose dmState says BLOCKED is blocked even with no attempt row in scope.
-  if (link.dmState === 'BLOCKED') return 'LINKED_BLOCKED';
+
+  // A refusal the cache learned about *after* the newest attempt we can see outranks that
+  // attempt. `DiscordLink.dmState` is global to the user and is rewritten by every send, so a
+  // kid who closed their DMs between two tournaments has a fresh BLOCKED in the cache and a
+  // stale SENT in this tournament's rows. Counting the stale one is precisely "a stale SENT
+  // surviving a fresh refusal", which this module promises never to do.
+  const cacheSaysBlocked = link.dmState === 'BLOCKED';
+  const cacheIsNewerThanAttempt =
+    Boolean(link.dmCheckedAt) &&
+    (!lastAttempt || (link.dmCheckedAt as Date).getTime() > lastAttempt.createdAt.getTime());
+  if (cacheSaysBlocked && cacheIsNewerThanAttempt) return 'LINKED_BLOCKED';
+
+  // The one green branch in this file. It requires an attempt row whose outcome is literally
+  // SENT — never a cached `dmState`, and never `MOCKED`, which is what an intercepted send
+  // writes when nothing left the process.
+  if (outcome === PROOF_OF_SEND) return 'LINKED_SENT';
+
+  // No attempt yet, or MOCKED / ERROR / RATE_LIMITED / SKIPPED_OPTOUT: nothing has been
+  // accepted for them. A link whose dmState says BLOCKED is blocked even with no attempt row
+  // in scope — an unexplained refusal still beats no evidence at all.
+  if (cacheSaysBlocked) return 'LINKED_BLOCKED';
   return 'LINKED_UNCONFIRMED';
 }
 
@@ -186,7 +224,13 @@ export async function buildReachReport(tournamentId: string): Promise<ReachRepor
   const links = userIds.length
     ? await prisma.discordLink.findMany({
         where: { userId: { in: userIds } },
-        select: { userId: true, dmState: true, optOut: true, discordUsername: true },
+        select: {
+          userId: true,
+          dmState: true,
+          dmCheckedAt: true,
+          optOut: true,
+          discordUsername: true,
+        },
       })
     : [];
   const linkByUser = new Map(links.map((l) => [l.userId, l]));
@@ -244,7 +288,9 @@ export async function buildReachReport(tournamentId: string): Promise<ReachRepor
   return {
     tournamentId: tournament.id,
     dmPaused: tournament.discordDmPaused,
+    sendMode: discordDmMode(),
     summary: summarize(rows),
     players: rows,
   };
 }
+

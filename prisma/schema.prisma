@@ -255,9 +255,13 @@ model DiscordDmAttempt {
   /// LINK_PROBE | MATCH_CALLED | MATCH_LIVE | MATCH_UPCOMING | MATCH_RESULT
   event       String
   matchId     String?
-  /// PENDING | SENT | MOCKED | BLOCKED | UNKNOWN_USER | RATE_LIMITED | ERROR | SKIPPED_OPTOUT
-  /// ONLY a transport that actually reached Discord may write SENT — a mock writes MOCKED, so
-  /// a missing token can never be mistaken for reach (see DmTransport.real in discord-dm.ts).
+  /// PENDING | SENT | MOCKED | BLOCKED | UNKNOWN_USER | RATE_LIMITED | ERROR
+  /// | SKIPPED_OPTOUT | SKIPPED_DISABLED
+  /// SENT is written ONLY when Discord itself accepted the message. A deployment that cannot
+  /// talk to Discord writes MOCKED, so a missing token can never be mistaken for reach (see
+  /// DmTransport.real in discord-dm.ts, which is the only writer). One name for this, not
+  /// three: two parallel branches independently called it MOCK and SIMULATED, and a vocabulary
+  /// that drifts is how "we sent it" ends up meaning four different things again.
   outcome     String
   /// Discord's own JSON error code, e.g. 50007 "Cannot send messages to this user".
   discordCode Int?
