@@ -5,6 +5,7 @@ import { requireAdminApi, requireSignedInUser, getUserSession } from '@/lib/rout
 import { isStaffSteamId } from '@/lib/admin-config';
 import { buildTeamsCsv, parseCsvRows } from '@/lib/csv';
 import { buildActorLabel, recordAudit } from '@/lib/audit';
+import { linkTeamPlayersBySteamId } from '@/lib/player-identity';
 import { errorResponse, lockedResponse } from '@/lib/mutation-guards';
 
 // Reads the session to decide how much of the roster to expose; never prerender.
@@ -198,6 +199,12 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
                 return items;
             });
 
+            // Connect imported players to their accounts where the steamId matches — otherwise
+            // an imported roster is unreachable by Discord and by alerts (Player.userId is the key).
+            for (const team of createdTeams) {
+                await linkTeamPlayersBySteamId(team.id);
+            }
+
             await recordAudit({
                 action: 'team.imported',
                 entityType: 'tournament',
@@ -251,6 +258,8 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
                 }
             },
         });
+
+        await linkTeamPlayersBySteamId(team.id);
 
         await recordAudit({
             action: 'team.created',

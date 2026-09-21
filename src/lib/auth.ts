@@ -2,6 +2,7 @@ import SteamProvider from "next-auth-steam";
 import DiscordProvider from "next-auth/providers/discord";
 import CredentialsProvider from "next-auth/providers/credentials";
 import prisma from "@/lib/prisma";
+import { backfillPlayersForUser } from "@/lib/player-identity";
 import { type NextAuthOptions } from "next-auth";
 import { type NextRequest } from "next/server";
 import { getRoleForSteamId } from "@/lib/admin-config";
@@ -97,7 +98,7 @@ export const getAuthOptions = (req: NextRequest | undefined): NextAuthOptions =>
       if (account?.provider === "steam" && account.providerAccountId) {
         try {
           const steamId = account.providerAccountId;
-          await prisma.user.upsert({
+          const dbUser = await prisma.user.upsert({
             where: { steamId: steamId },
             update: {
               name: user.name,
@@ -109,6 +110,11 @@ export const getAuthOptions = (req: NextRequest | undefined): NextAuthOptions =>
               steamId: steamId,
             },
           });
+          // A player an organizer typed in before this account ever signed in is orphaned:
+          // it has a steamId but no userId, so nothing can reach them. Adopt those rows now.
+          await backfillPlayersForUser(dbUser.id, steamId).catch((e) =>
+            console.warn("[auth] player back-fill failed:", e?.message)
+          );
           return true;
         } catch (error) {
           console.error("Error during Steam signIn manual sync:", error);

@@ -27,6 +27,9 @@ model Tournament {
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @default(now()) @updatedAt
   rosterLocked       Boolean           @default(false)
+  /// Organizer kill switch: stop all Discord DMs for this tournament without stopping
+  /// channel posts. Reachable from a phone when something is going wrong on the floor.
+  discordDmPaused    Boolean           @default(false)
   auditLogs          AuditLog[]
   matches            Match[]
   notifications      NotificationLog[]
@@ -108,6 +111,9 @@ model User {
   // UI language. Needed server-side (not just as a cookie) so a push notification can be
   // written in the recipient's own language — see src/lib/notify.ts.
   locale        String?
+  discordLink       DiscordLink?
+  discordLinkCode   DiscordLinkCode?
+  discordDmAttempts DiscordDmAttempt[]
   accounts      Account[]
   sessions      Session[]
   players       Player[]
@@ -198,4 +204,57 @@ model AuditLog {
   metadata    String?
   createdAt   DateTime    @default(now())
   tournament  Tournament? @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+}
+
+/// A player's Discord account, bound to their Summit (Steam) account by redeeming a code.
+/// Steam is the identity Summit trusts; this is purely an address to deliver to.
+model DiscordLink {
+  userId          String    @id
+  discordId       String    @unique
+  discordUsername String
+  /// Cached DM channel id. Latency only — never trusted. A 404/10003 clears it and the next
+  /// send re-opens the channel.
+  dmChannelId     String?
+  /// UNKNOWN | SENT | BLOCKED. Rewritten by EVERY send, not just at link time, because a kid
+  /// can close their DMs at any point. SENT means Discord accepted it — never that it was read.
+  dmState         String    @default("UNKNOWN")
+  dmCheckedAt     DateTime?
+  dmError         String?
+  /// Honoured at fan-out, before any send is attempted.
+  optOut          Boolean   @default(false)
+  linkedAt        DateTime  @default(now())
+  updatedAt       DateTime  @default(now()) @updatedAt
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// A short-lived code shown in the app and redeemed with /koble in the Discord server.
+/// One live code per user — the @unique on userId gives that for free.
+model DiscordLinkCode {
+  code      String   @id
+  userId    String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// One row per recipient per send attempt. This is what stops the UI claiming a player was
+/// notified when Discord refused: nothing may render "varslet" that is not backed by a row here.
+model DiscordDmAttempt {
+  id          String   @id @default(cuid())
+  userId      String
+  discordId   String
+  /// LINK_PROBE | MATCH_CALLED | MATCH_LIVE | MATCH_UPCOMING | MATCH_RESULT
+  event       String
+  matchId     String?
+  /// SENT | BLOCKED | UNKNOWN_USER | RATE_LIMITED | ERROR | SKIPPED_OPTOUT
+  outcome     String
+  /// Discord's own JSON error code, e.g. 50007 "Cannot send messages to this user".
+  discordCode Int?
+  locale      String
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, event, userId])
+  @@index([matchId])
+  @@index([createdAt])
 }

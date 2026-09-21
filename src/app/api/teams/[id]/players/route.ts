@@ -4,6 +4,7 @@ import { requireStaffApi } from '@/lib/route-auth';
 import { buildActorLabel, recordAudit } from '@/lib/audit';
 import { resolveSteamId } from '@/lib/steam';
 import { lockedResponse } from '@/lib/mutation-guards';
+import { linkPlayerToUserBySteamId } from '@/lib/player-identity';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,6 +82,10 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
                 tournamentId: team.tournamentId,
             },
         });
+
+        // Connect the row to its owner's account when we can: every delivery channel keys off
+        // Player.userId, so an unlinked player is unreachable by Discord and by alerts.
+        await linkPlayerToUserBySteamId(player.id, steamId);
 
         await recordAudit({
             action: 'player.created',
