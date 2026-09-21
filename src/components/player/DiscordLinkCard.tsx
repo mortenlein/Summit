@@ -33,15 +33,17 @@ interface DiscordLinkState {
  * entirely — without that the kid runs the command, tabs back to a page still showing the same
  * code, and concludes it failed.
  *
- * `variant="desk"` renders nothing once linked: the player desk is a one-question surface and
- * a permanently-parked "you're all set" row is exactly the clutter being stripped off it.
+ * It lives on `/profile` only. Spec §6 and `docs/kid-clutter-plan.md` both say the player desk
+ * carries nothing, and acquisition happens in Discord itself.
  */
-export function DiscordLinkCard({ variant = 'profile' }: { variant?: 'profile' | 'desk' }) {
+export function DiscordLinkCard() {
   const t = useTranslations('discord');
   const queryClient = useQueryClient();
   const [copied, setCopied] = useState(false);
   const [failed, setFailed] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  /** The last code this card actually showed, so it can tell "expired" from "never had one". */
+  const [shownCode, setShownCode] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<DiscordLinkState>({
     queryKey: ['discord-link'],
@@ -61,9 +63,20 @@ export function DiscordLinkCard({ variant = 'profile' }: { variant?: 'profile' |
 
   const expiresAt = data?.codeExpiresAt ? new Date(data.codeExpiresAt).getTime() : null;
   const msLeft = expiresAt ? expiresAt - now : 0;
-  const expired = Boolean(data?.code && expiresAt && msLeft <= 0);
 
-  // A one-second tick only while a code is on screen — the card is otherwise inert.
+  // Remember the code we put on screen. The server stops reporting a code the moment it
+  // expires (`liveLinkCode` returns null), and while a code is live this card is polling every
+  // three seconds — so the local `msLeft <= 0` branch alone almost never fires, and the kid
+  // would watch their code vanish with no word about why. "There was a code here and now the
+  // server has none" is the reliable signal, so that is what drives the expired notice.
+  useEffect(() => {
+    if (data?.code) setShownCode(data.code);
+  }, [data?.code]);
+
+  const codeVanished = Boolean(shownCode && !data?.code && !data?.linked);
+  const expired = Boolean((data?.code && expiresAt && msLeft <= 0) || codeVanished);
+
+  // A one-second tick only while a live code is on screen — the card is otherwise inert.
   useEffect(() => {
     if (!data?.code || expired) return;
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -81,6 +94,9 @@ export function DiscordLinkCard({ variant = 'profile' }: { variant?: 'profile' |
     onSuccess: () => {
       setFailed(false);
       setNow(Date.now());
+      // The old code is dead the moment this one is minted; clearing it here stops the expiry
+      // notice flashing over a code the kid just asked for.
+      setShownCode(null);
       refresh();
     },
     onError: () => setFailed(true),
@@ -94,6 +110,9 @@ export function DiscordLinkCard({ variant = 'profile' }: { variant?: 'profile' |
     },
     onSuccess: () => {
       setFailed(false);
+      // Unlinking takes any pending code with it server-side. That is not an expiry, so the
+      // card must not report one.
+      setShownCode(null);
       refresh();
     },
     onError: () => setFailed(true),
@@ -116,7 +135,6 @@ export function DiscordLinkCard({ variant = 'profile' }: { variant?: 'profile' |
   // Nothing to offer: no bot key, no guild, no invite — the same self-hiding posture the
   // alerts button has with no VAPID keys. Never a dead end, never a nag.
   if (isLoading || !data?.configured) return null;
-  if (variant === 'desk' && data.linked) return null;
 
   const copyCode = async () => {
     if (!data.code) return;
@@ -152,8 +170,13 @@ export function DiscordLinkCard({ variant = 'profile' }: { variant?: 'profile' |
             {copied ? t('card.copied') : t('card.copy')}
           </Button>
         </div>
-        <p className="text-xs text-fg-subtle">
-          {t('card.expires', { minutes: Math.max(1, Math.ceil(msLeft / 60000)) })}
+        {/* Below a minute this counts seconds. Clamping to "1 more minute" for the last 59
+            seconds tells a kid they have a minute when they have eight, and the code dying
+            mid-paste is exactly the moment they conclude the whole thing is broken. */}
+        <p className="text-xs text-fg-subtle" data-testid="discord-code-expires">
+          {msLeft < 60000
+            ? t('card.expiresSeconds', { seconds: Math.max(0, Math.ceil(msLeft / 1000)) })
+            : t('card.expires', { minutes: Math.ceil(msLeft / 60000) })}
         </p>
         <p className="flex items-center gap-2 text-xs text-fg-muted" data-testid="discord-waiting">
           <Loader2 size={12} className="animate-spin" />
@@ -189,7 +212,9 @@ export function DiscordLinkCard({ variant = 'profile' }: { variant?: 'profile' |
       {data.linked ? (
         <div className="space-y-2">
           <p className="text-sm text-fg" data-testid="discord-linked">
-            {t('card.linked', { username: data.username || '' })}
+            {/* The server never stores an empty username (it falls back to "Discord"), but an
+                older row might, and "Linked to Discord as " reads as a broken card. */}
+            {t('card.linked', { username: data.username || 'Discord' })}
           </p>
           {/* "sendt", never "levert": a 204 proves Discord accepted a message, not that a kid
               read one. The wording here is load-bearing. */}

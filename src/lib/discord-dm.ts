@@ -70,6 +70,17 @@ export function isDmProdReady(): boolean {
 }
 
 /**
+ * The explicit "intercept everything" flag — the `[STRATEGY 3 MOCK]` posture, for DMs.
+ *
+ * Defined here rather than in discord-link.ts because it has to govern the transport, and the
+ * transport lives here. It is the same flag `discord.ts` reads for channel posts, so one
+ * setting silences every outbound path instead of two settings silencing one each.
+ */
+export function isDmIntercepted(): boolean {
+  return process.env.NEXT_PUBLIC_STRATEGY_3_MOCK === "true";
+}
+
+/**
  * The master switch plus the organizer's phone-reachable kill switch.
  *
  * `DISCORD_DM_ENABLED` ships `false` and is flipped to `true` after the rehearsal;
@@ -227,6 +238,11 @@ export function mockDmTransport(): DmTransport {
 }
 
 function defaultTransport(): DmTransport {
+  // The flag wins over the token, in that order, deliberately. A deployment that has asked to
+  // intercept everything must not start DMing 13-year-olds because somebody pasted a token into
+  // .env — and an e2e run that wants the card configured has to be able to say so without the
+  // sender quietly dialling Discord. Choosing on the token alone was that bug.
+  if (isDmIntercepted()) return mockDmTransport();
   return isDmProdReady() ? restDmTransport() : mockDmTransport();
 }
 
@@ -317,9 +333,32 @@ export type DmOutcome =
   | 'UNKNOWN_USER'
   | 'RATE_LIMITED'
   | 'ERROR'
-  /** DMs are switched off (the master flag, or the organizer's pause). Nothing was attempted. */
+  /** The master flag is off. Nothing was attempted. */
   | 'SKIPPED_DISABLED'
+  /** An organizer pulled the per-tournament kill switch. Nothing was attempted. */
+  | 'SKIPPED_PAUSED'
   | 'SKIPPED_OPTOUT';
+
+/** The outcomes that mean "Discord was never asked", as opposed to "Discord was asked and said no". */
+const NOT_ATTEMPTED: ReadonlySet<string> = new Set<DmOutcome>([
+  'PENDING',
+  'MOCKED',
+  'SKIPPED_DISABLED',
+  'SKIPPED_PAUSED',
+  'SKIPPED_OPTOUT',
+]);
+
+/**
+ * True when the message really was handed to Discord.
+ *
+ * Never infer this from `outcome !== 'SENT'`. The two questions differ, and the column that
+ * depends on the difference is `dmCheckedAt`: it is a *check* timestamp, so stamping it for a
+ * send nobody attempted makes a never-tried link look freshly verified on every staff screen
+ * that ages or sorts by it.
+ */
+export function wasDmAttempted(outcome: DmOutcome): boolean {
+  return !NOT_ATTEMPTED.has(outcome);
+}
 
 /**
  * Call-up outcomes that make a MATCH_LIVE DM pointless for that one recipient. Everything NOT in
