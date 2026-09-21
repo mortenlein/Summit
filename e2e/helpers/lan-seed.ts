@@ -651,6 +651,11 @@ export interface DiscordLinkOptions {
   discordUsername?: string;
   /** UNKNOWN | SENT | BLOCKED — the cached state, deliberately settable without an attempt. */
   dmState?: string;
+  /**
+   * When the cache was last rewritten. Settable on its own so a test can build the nasty case:
+   * a fresh refusal in the cache sitting on top of an older accepted attempt.
+   */
+  dmCheckedAt?: Date;
   optOut?: boolean;
 }
 
@@ -663,6 +668,7 @@ export async function linkDiscord(userId: string, options: DiscordLinkOptions = 
       discordId: options.discordId ?? `9911${Date.now()}${discordCounter}`,
       discordUsername: options.discordUsername ?? `player_${discordCounter}`,
       dmState: options.dmState ?? 'UNKNOWN',
+      dmCheckedAt: options.dmCheckedAt ?? null,
       optOut: options.optOut ?? false,
     },
   });
@@ -671,10 +677,16 @@ export async function linkDiscord(userId: string, options: DiscordLinkOptions = 
 export interface DmAttemptOptions {
   event?: string;
   matchId?: string | null;
-  /** SENT | BLOCKED | UNKNOWN_USER | RATE_LIMITED | ERROR | SKIPPED_OPTOUT */
+  /**
+   * SENT | BLOCKED | UNKNOWN_USER | RATE_LIMITED | ERROR | SKIPPED_OPTOUT | SIMULATED.
+   * SIMULATED is what a deployment that cannot talk to Discord writes — a row that proves a
+   * send was *not* made, which the panel must never count.
+   */
   outcome: string;
   discordCode?: number | null;
   locale?: string;
+  /** Back-date the evidence, to test which of two facts is the newer one. */
+  createdAt?: Date;
 }
 
 /** One row of proof (or of refusal) that Discord answered about this user. */
@@ -688,6 +700,7 @@ export async function recordDmAttempt(userId: string, discordId: string, options
       outcome: options.outcome,
       discordCode: options.discordCode ?? null,
       locale: options.locale ?? 'nb',
+      ...(options.createdAt ? { createdAt: options.createdAt } : {}),
     },
   });
 }

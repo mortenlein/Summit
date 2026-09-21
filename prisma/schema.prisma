@@ -246,7 +246,10 @@ model DiscordDmAttempt {
   /// LINK_PROBE | MATCH_CALLED | MATCH_LIVE | MATCH_UPCOMING | MATCH_RESULT
   event       String
   matchId     String?
-  /// SENT | BLOCKED | UNKNOWN_USER | RATE_LIMITED | ERROR | SKIPPED_OPTOUT
+  /// SENT | BLOCKED | UNKNOWN_USER | RATE_LIMITED | ERROR | SKIPPED_OPTOUT | SIMULATED
+  /// SENT is written ONLY when Discord itself accepted the message. A deployment that cannot
+  /// talk to Discord (mock mode, or no bot token) writes SIMULATED instead — see
+  /// `recordDmAttempt` in src/lib/discord-reach.ts, which is the only supported writer.
   outcome     String
   /// Discord's own JSON error code, e.g. 50007 "Cannot send messages to this user".
   discordCode Int?
