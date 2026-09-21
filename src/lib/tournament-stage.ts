@@ -6,14 +6,23 @@ export const STAGE_ORDER: TournamentStage[] = ["DRAFT", "REGISTRATION", "LIVE", 
 
 /**
  * Derive a tournament's lifecycle stage from its data (no DB field needed):
- *  - DRAFT: fewer than 2 teams, no bracket yet.
- *  - REGISTRATION: enough teams, bracket not generated.
+ *  - DRAFT: no bracket, sign-up not open, and fewer than 2 teams.
+ *  - REGISTRATION: sign-up is open, or enough teams are in. Bracket not generated.
  *  - LIVE: bracket generated, matches still in progress.
  *  - COMPLETE: every match finished.
+ *
+ * `signupOpen` is the tournament's own `steamSignupEnabled` flag, and it decides the first two
+ * on its own. Without it a published tournament reads as "Utkast" until two teams have joined
+ * — and two teams cannot join a tournament that presents itself to them as a draft. The team
+ * count is only a fallback for tournaments whose rosters an organizer types in by hand.
  */
-export function getTournamentStage(teams: any[] = [], matches: any[] = []): TournamentStage {
+export function getTournamentStage(
+  teams: any[] = [],
+  matches: any[] = [],
+  signupOpen = false
+): TournamentStage {
   if (!matches || matches.length === 0) {
-    return (teams?.length || 0) >= 2 ? "REGISTRATION" : "DRAFT";
+    return signupOpen || (teams?.length || 0) >= 2 ? "REGISTRATION" : "DRAFT";
   }
   const allDone = matches.every((m) => isDone(String(m.status || "").toUpperCase()));
   return allDone ? "COMPLETE" : "LIVE";

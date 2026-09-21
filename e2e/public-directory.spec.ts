@@ -101,10 +101,10 @@ test('directory filter narrows the list and survives reload through the URL', as
   await page.getByPlaceholder('Filter tournaments…').fill(`Zephyr Open ${stamp}`);
   await expect(page.getByRole('heading', { name: wanted.name, exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: other.name, exact: true })).toHaveCount(0);
-  // The count lives on the "All" chip, which is also the control that clears the filter. The
-  // separate "1 listed" badge is gone: it repeated whichever chip was active, and on a phone it
-  // wrapped to a row of its own and pushed the first tournament down.
-  await expect(page.getByRole('button', { name: /^All\s*1$/ })).toBeVisible();
+  // Count the board itself. The "1 listed" badge is gone — it repeated whichever chip was
+  // active — and so are the chips at this size: a filter row over a list of one is furniture,
+  // so both the chips and the count they carry appear only above six tournaments.
+  await expect(page.locator('ul.mds-card-grid > li')).toHaveCount(1);
   await expect(page).toHaveURL(/[?&]search=Zephyr/);
 
   // The filter is URL state, so a shared link reproduces the filtered board.

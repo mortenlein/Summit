@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useSession } from "next-auth/react";
 import { Loader2, Search, Gamepad2 } from "lucide-react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -39,6 +40,9 @@ export default function TournamentsOverviewClient() {
   const pathname = usePathname();
   const searchQuery = searchParams.get("search") || "";
   const stageFilter = (searchParams.get("stage") || "").toUpperCase();
+  const { data: session } = useSession();
+  const role = (session?.user as { role?: string } | undefined)?.role;
+  const isStaff = role === "admin" || role === "marshal";
 
   const { data, isLoading } = useQuery({
     queryKey: ["tournaments"],
@@ -76,10 +80,14 @@ export default function TournamentsOverviewClient() {
     : searched;
 
   // Counts come from the data, so a filter is never offered for a bucket that is empty.
+  //
+  // UTKAST is filtered out for players: "draft" is organizer vocabulary for a tournament a kid
+  // cannot enter, offered as something to go and look at. The cards themselves stay, badge and
+  // all — a kid who scrolls past one should still see what it is; only the invitation goes.
   const stageCounts = STAGE_ORDER.map((stage) => ({
     stage,
     count: searched.filter((row) => String(row.stage || "").toUpperCase() === stage).length,
-  })).filter((s) => s.count > 0);
+  })).filter((s) => s.count > 0 && (isStaff || s.stage !== "DRAFT"));
 
   // Board order, not lifecycle order: what is being played outranks what someone might sign up
   // for, which outranks a draft nobody can enter, which outranks a tournament already decided.
@@ -93,6 +101,18 @@ export default function TournamentsOverviewClient() {
   // Is there anything on this server at all (before search/stage filtering)? If not, the
   // filter field and the stage chips are hidden: controls for a board that does not exist.
   const hasAny = tournaments.length > 0;
+  /**
+   * Both the search box and the chip row earn their space only on a board big enough to need
+   * them. Six is the threshold: below it every tournament is on screen already, and a filter
+   * over a list you can see is furniture.
+   *
+   * The `searchQuery` half of the search gate is not optional. Honouring `?search=` while
+   * hiding the input produces a board filtered to nothing, a "remove the filter" line, and no
+   * input to remove it in. And both gates test the PRE-filter length, never `filtered.length`,
+   * or the controls delete themselves mid-keystroke.
+   */
+  const showSearch = searched.length > 6 || searchQuery.length > 0;
+  const showChips = hasAny && searched.length > 6 && stageCounts.length > 1;
 
   return (
     <div className="flex min-h-screen flex-col bg-page text-fg">
@@ -102,7 +122,7 @@ export default function TournamentsOverviewClient() {
       <PageHeader
         title={tc("tournaments")}
         actions={
-          hasAny ? (
+          hasAny && showSearch ? (
             <div className="relative w-full sm:w-72">
               <label htmlFor="directory-filter" className="sr-only">
                 {t("filterLabel")}
@@ -126,7 +146,7 @@ export default function TournamentsOverviewClient() {
       />
 
       <main className="mds-container flex flex-1 flex-col gap-6 py-8">
-        {hasAny && (
+        {showChips && (
           <div className="mds-section-head">
             {/* No "TAVLA" heading. It was ~90px of a 358px row, read as a fourth chip that does
                 not tap, and in this app's Norwegian *tavla* is the crew board — so it pointed a

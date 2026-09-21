@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
 
     const tournaments = rows.map(({ teams, matches, ...tournament }) => ({
         ...tournament,
-        stage: getTournamentStage(teams, matches),
+        stage: getTournamentStage(teams, matches, tournament.steamSignupEnabled),
     }));
 
     const nextCursor = !fetchAll && limit && tournaments.length === limit ? tournaments[tournaments.length - 1].id : null;
