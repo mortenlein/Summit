@@ -523,3 +523,49 @@ test('two triggers racing for the same up-next post produce one row', async () =
   const descriptions = (await upNext()).map((row) => row.description);
   expect(new Set(descriptions).size).toBe(descriptions.length);
 });
+
+/**
+ * Regression: one bad token must not cost the club its bot.
+ *
+ * 401 (wrong token) and 50001 (bot not in the guild) are the same answer for every recipient,
+ * so the first version — terminal *for this recipient*, carry on to the next — turned one typo
+ * into one rejected request per player, per call-up, all day. Discord counts sustained invalid
+ * authorization against an application and bans for it.
+ *
+ * The first config-level rejection now stops every send in the process. The rows are still
+ * written, because those kids really were not reached.
+ */
+test('a rejected bot token stops the fan-out instead of repeating itself per player', async () => {
+  const { match, leoUserId, samUserId } = await linkedMatch({
+    leo: { discordId: 'dc-breaker-leo' },
+    sam: { discordId: 'dc-breaker-sam' },
+  });
+  const mia = await apiAs('mia');
+
+  // Discord rejects the token. Not this kid's problem, and not the next kid's either.
+  simulate({ '*': { status: 401 } });
+  expect((await mia.post(`/api/matches/${match.id}/load`)).status()).toBe(200);
+  await expect.poll(async () => (await settled(match.id)).length).toBe(2);
+
+  const rows = await readDmAttempts(match.id);
+  expect(rows).toHaveLength(2);
+  for (const row of rows) {
+    expect(row.outcome).toBe('ERROR');
+  }
+
+  // One recipient heard it from Discord; the other was refused locally, without a request. The
+  // prefix is the difference, and it is the difference somebody needs at 02:00 when forty
+  // players show as unreached.
+  const reasons = await Promise.all(
+    [leoUserId, samUserId].map(async (id) => (await readDiscordLink(id))!.dmError)
+  );
+  expect(reasons.sort()).toEqual(['breaker_invalid_token', 'invalid_token']);
+
+  // …and it heals, so fixing the configuration does not need a container restart.
+  simulate({});
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  const { match: later } = await linkedMatch({ leo: { discordId: 'dc-healed-leo' } });
+  expect((await mia.post(`/api/matches/${later.id}/load`)).status()).toBe(200);
+  await expect.poll(async () => (await settled(later.id)).length).toBe(2);
+  expect((await readDmAttempts(later.id)).every((row) => row.outcome === 'MOCKED')).toBe(true);
+});

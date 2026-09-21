@@ -81,6 +81,58 @@ export function isDmEnabled(tournament?: { discordDmPaused?: boolean | null } | 
   return !tournament?.discordDmPaused;
 }
 
+/**
+ * The configuration circuit breaker.
+ *
+ * 401 (wrong token) and 50001 (bot not in the guild) are not per-recipient failures — they will
+ * happen for every recipient, identically. The first version treated them as terminal *for that
+ * recipient* and moved on to the next, so one call-up on a ten-player match meant ten rejected
+ * requests, and a tournament-wide re-announce meant forty. Discord counts sustained invalid
+ * authorization against an application and bans for it: the failure mode of a typo'd token was
+ * losing the bot, at a LAN, on the day.
+ *
+ * So the first config-level rejection stops every send in the process. Remaining recipients
+ * still get their attempt row — those kids really were not reached, and the reach panel must
+ * say so — but nothing else goes to Discord.
+ *
+ * The cooldown exists so a fix does not need a container restart: invite the bot to the guild,
+ * wait it out, and the next call-up tries again. A wrong token will simply trip it once more.
+ */
+const BREAKER_COOLDOWN_MS_DEFAULT = 5 * 60 * 1000;
+
+/** Five minutes in production. The e2e harness shortens it so a spec can watch it heal. */
+function breakerCooldownMs(): number {
+  const override = Number(process.env.DISCORD_DM_BREAKER_MS);
+  return Number.isFinite(override) && override > 0 ? override : BREAKER_COOLDOWN_MS_DEFAULT;
+}
+
+let breaker: { reason: string; until: number } | null = null;
+
+function tripBreaker(reason: string) {
+  const cooldown = breakerCooldownMs();
+  breaker = { reason, until: Date.now() + cooldown };
+  console.error(
+    `[DiscordDM] CONFIG BREAKER TRIPPED (${reason}). No further DMs for ${Math.round(
+      cooldown / 1000
+    )}s. Fix the configuration — this is not a per-player problem.`
+  );
+}
+
+/** The reason DMs are being refused right now, or null. Exported for the reach panel and tests. */
+export function dmBreakerReason(): string | null {
+  if (!breaker) return null;
+  if (Date.now() >= breaker.until) {
+    breaker = null;
+    return null;
+  }
+  return breaker.reason;
+}
+
+/** Test seam: forget a tripped breaker. */
+export function resetDmBreaker() {
+  breaker = null;
+}
+
 let restClient: REST | null = null;
 function rest(): REST {
   if (!restClient) restClient = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN!);
@@ -265,6 +317,8 @@ export type DmOutcome =
   | 'UNKNOWN_USER'
   | 'RATE_LIMITED'
   | 'ERROR'
+  /** DMs are switched off (the master flag, or the organizer's pause). Nothing was attempted. */
+  | 'SKIPPED_DISABLED'
   | 'SKIPPED_OPTOUT';
 
 /**
@@ -333,6 +387,13 @@ export async function sendDirectMessage(
 ): Promise<DmResult> {
   const { userId, discordId, event, matchId = null, locale, content } = request;
 
+  // The master switch is checked HERE, not only at the fan-out. This function is exported, the
+  // bot's link probe can be wired to it, and a switch that one caller can walk around is not a
+  // switch. Nothing is written: no attempt was made, and an attempt row means an attempt.
+  if (!isDmEnabled()) {
+    return { userId, outcome: 'SKIPPED_DISABLED', attempted: false };
+  }
+
   let attemptId: string;
   try {
     const row = await prisma.discordDmAttempt.create({
@@ -378,6 +439,16 @@ export async function sendDirectMessage(
   let serverRetries = 0;
   let rateRetries = 0;
 
+  // A config-level failure earlier in this fan-out already told us what Discord will say. The
+  // row is written (this kid was not reached, and the panel must show that) but nothing is sent.
+  const tripped = dmBreakerReason();
+  if (tripped) {
+    // Prefixed, so the record distinguishes "Discord told us this" from "we already knew and
+    // did not ask again" — which is the whole question when somebody is working out at 02:00
+    // why forty players show as unreached.
+    return finish('ERROR', undefined, 'UNKNOWN', `breaker_${tripped}`);
+  }
+
   // The retry loop runs *inside* the paced slot: a 429 or a 5xx backoff has to stall everybody,
   // not just this recipient, or the retry lands in the middle of somebody else's send.
   return paced(async () => {
@@ -406,6 +477,7 @@ export async function sendDirectMessage(
         // per-user one: terminal here, and loud in the log.
         if (error.code === 50001) {
           console.error('[DiscordDM] Missing Access (50001) — is the bot in the guild?');
+          tripBreaker('missing_access');
           return await finish('ERROR', 50001, 'UNKNOWN', 'missing_access');
         }
         // 10013 Unknown User — the snowflake is gone. Clear the cache and ask for a re-link.
@@ -423,6 +495,9 @@ export async function sendDirectMessage(
         // 401/50014 — the token is wrong. Nothing about this is per-recipient.
         if (error.status === 401) {
           console.error('[DiscordDM] FATAL: Discord rejected the bot token (401).');
+          // Every remaining recipient would earn the same 401, and Discord bans applications for
+          // sustained invalid authorization. One is a typo; forty is losing the bot.
+          tripBreaker('invalid_token');
           return await finish('ERROR', error.code, 'UNKNOWN', 'invalid_token');
         }
         // 429 — honour the body's retry_after, never a backoff of our own. Does not consume the
@@ -430,6 +505,12 @@ export async function sendDirectMessage(
         if (error.status === 429) {
           const waitMs = Math.max(0, error.retryAfterMs ?? 1000);
           stallUntil(Date.now() + waitMs);
+          // A *global* 429 is the whole application being throttled, not this route. Pressing on
+          // through the rest of the roster is what turns a throttle into a ban.
+          if (error.global) {
+            tripBreaker('global_rate_limit');
+            return await finish('RATE_LIMITED', error.code, undefined, 'global_rate_limit');
+          }
           if (rateRetries < 2) {
             rateRetries += 1;
             await sleep(waitMs);

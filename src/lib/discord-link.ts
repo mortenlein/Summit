@@ -136,6 +136,7 @@ export async function liveLinkCode(userId: string): Promise<IssuedCode | null> {
 // could not express, so the linking half kept saying SENT. (No cycle — discord-dm does not
 // import this module.)
 export type { DmOutcome } from "@/lib/discord-dm";
+import { isDmEnabled } from "@/lib/discord-dm";
 import type { DmOutcome } from "@/lib/discord-dm";
 
 export interface DmProbeRequest {
@@ -200,6 +201,12 @@ const mockProbe: DmProbe = async ({ discordId, locale, body }) => {
 };
 
 async function runProbe(request: DmProbeRequest): Promise<DmProbeResult> {
+  // The master switch covers the probe too. Linking is still worth doing with DMs off — the
+  // account is on file for the moment they are switched on — but a switch the link flow walks
+  // around is not a switch, and this one ships `false` until the rehearsal has happened.
+  if (!isDmEnabled()) {
+    return { outcome: "SKIPPED_DISABLED" };
+  }
   const probe = probeImpl ?? (isDiscordDmMocked() ? mockProbe : null);
   if (!probe) {
     // Configured for real delivery, but nothing has registered a sender. Saying SENT here is
@@ -363,7 +370,7 @@ export async function redeemLinkCode(input: {
       // Writing it here would put a non-error in the column the crew reads when a kid says
       // the DM never came.
       dmError:
-        probe.outcome === "SENT" || probe.outcome === "MOCKED"
+        probe.outcome === "SENT" || probe.outcome === "MOCKED" || probe.outcome === "SKIPPED_DISABLED"
           ? null
           : probe.error || String(probe.discordCode ?? probe.outcome),
       ...(probe.dmChannelId !== undefined ? { dmChannelId: probe.dmChannelId } : {}),

@@ -61,6 +61,10 @@ process.env.PUSH_DELIVERY_LOG = path.resolve(process.cwd(), 'prisma', `e2e-${E2E
 // the whole thing returns before touching a recipient and every assertion passes for the wrong
 // reason. Same posture as VAPID above.
 process.env.DISCORD_DM_ENABLED = 'true';
+// The config circuit breaker holds for five minutes in production. A spec has to be able to
+// watch it trip AND watch it heal, and it must not poison the DM specs that run after it, so
+// the harness shortens the cooldown rather than adding a reset backdoor to the module.
+process.env.DISCORD_DM_BREAKER_MS = '1500';
 // One JSON line per DM attempt — what would have been sent, and what Discord answered. This is
 // the only way a spec can read a message body that, in production, exists nowhere but a kid's
 // phone. Mirrors PUSH_DELIVERY_LOG; unset everywhere else, including production.
