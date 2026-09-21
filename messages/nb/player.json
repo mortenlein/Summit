@@ -85,7 +85,6 @@
     "label": "Spillerprofil",
     "signInTitle": "Logg inn for å se profilen din",
     "signInBody": "Lagene dine, turneringene du er med i, og plassen hver av dem kjenner deg på.",
-    "statOpenMatches": "{count, plural, one {<n>#</n> åpen kamp} other {<n>#</n> åpne kamper}}",
     "loading": "Laster turneringene dine…",
     "emptyTitle": "Ingen turneringer ennå",
     "emptyBody": "Meld deg på en, så dukker den opp her med laget ditt og plassen din.",

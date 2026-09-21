@@ -9,8 +9,15 @@ export interface TournamentCardProps {
   href: string;
   /** The organizer's own name for the tournament — rendered as content, never uppercased. */
   name: string;
-  /** Human game name ("Counter-Strike 2"), not the enum. */
-  game: string;
+  /**
+   * Human game name ("Counter-Strike 2"), not the enum.
+   *
+   * Omitted when the board it sits on runs one game, which is every LAN this club has held: an
+   * eyebrow that says the same word on all eight cards is a column of noise, not a label. The
+   * caller decides, over the *unfiltered* board — computing it over the filtered rows would
+   * make the eyebrow appear and disappear between keystrokes.
+   */
+  game?: string;
   /** Human format ("Single elim"), not SINGLE_ELIMINATION. */
   format: string;
   /** Roster size label ("5v5", "Duos"). */
@@ -46,7 +53,6 @@ export function TournamentCard({
 }: TournamentCardProps) {
   const t = useTranslations("common");
   const isLive = stageTone === "live";
-  const pct = progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : null;
 
   return (
     <Link href={href} className="group block h-full rounded-lg">
@@ -56,7 +62,7 @@ export function TournamentCard({
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-1.5">
-            <p className="mds-uppercase-label text-fg-subtle">{game}</p>
+            {game && <p className="mds-uppercase-label text-fg-subtle">{game}</p>}
             <CardTitle>{name}</CardTitle>
           </div>
           <Badge tone={stageTone}>{stageLabel}</Badge>
@@ -66,51 +72,51 @@ export function TournamentCard({
             "8 lag" restate the words beside them, and both stats already carry a screen-reader
             label. The two blocks stay separate — one flattened "Single elim · 5v5 · 8 lag"
             string would lose those labels — so the pulsing live dot is the only glyph here. */}
-        <dl className="mds-stat-row">
-          <div className="mds-stat">
-            <dt className="sr-only">{t("format")}</dt>
-            <dd>
-              {format} · {roster}
-            </dd>
-          </div>
-          <div className="mds-stat">
-            <dt className="sr-only">{t("teams")}</dt>
-            <dd>{t("teamCount", { count: teamCount })}</dd>
-          </div>
-          {isLive && liveCount > 0 && (
-            <div className="mds-stat text-live">
-              <dt className="sr-only">{t("liveMatches")}</dt>
-              <span className="mds-dot is-live" aria-hidden />
-              <dd>{t("matchesLive", { count: liveCount })}</dd>
+        {/* Everything the card says, on one row, with the arrow at its end.
+            The footer this replaces was a bordered row carrying the verb "Åpne turneringen" on
+            a card that is already entirely a link — ~45px and a rule per card, eight cards to a
+            board. The verb survives for a screen reader (an aria-label on the <Link> would have
+            erased the name instead of adding to it).
+            The progress figure also moves here as plain text: the 1px bar and its "KAMPER
+            SPILT" label were two rows for one fraction, and the fraction is the signal that
+            survives the lull when nothing is live. */}
+        <dl className="mds-stat-row mt-auto items-center justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+            <div className="mds-stat">
+              <dt className="sr-only">{t("format")}</dt>
+              <dd>
+                {format} · {roster}
+              </dd>
             </div>
-          )}
-        </dl>
-
-        {pct !== null && (
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-meta font-semibold text-fg-subtle">
-              <span className="mds-uppercase-label">{t("matchesPlayed")}</span>
-              <span className="mds-numeric">
-                {progress!.done}/{progress!.total}
-              </span>
+            <div className="mds-stat">
+              <dt className="sr-only">{t("teams")}</dt>
+              <dd>{t("teamCount", { count: teamCount })}</dd>
             </div>
-            <div className="h-1 w-full overflow-hidden rounded-full bg-tint-strong">
-              <div
-                className={`h-full rounded-full ${isLive ? "bg-live" : "bg-brand"}`}
-                style={{ width: `${pct}%` }}
-              />
-            </div>
+            {progress && progress.total > 0 && (
+              <div className="mds-stat">
+                <dt className="sr-only">{t("matchesPlayed")}</dt>
+                <dd className="mds-numeric">
+                  {t("playedOf", { done: progress.done, total: progress.total })}
+                </dd>
+              </div>
+            )}
+            {isLive && liveCount > 0 && (
+              // The dot stays red; the words do not. One red chip and one red dot per card,
+              // instead of a chip, a phrase, a border and a bar all competing.
+              <div className="mds-stat">
+                <dt className="sr-only">{t("liveMatches")}</dt>
+                <span className="mds-dot is-live" aria-hidden />
+                <dd>{t("matchesLive", { count: liveCount })}</dd>
+              </div>
+            )}
           </div>
-        )}
-
-        <div className="mt-auto flex items-center justify-between border-t border-line pt-3 text-body font-semibold">
-          <span>{isLive ? t("watchLive") : t("openTournament")}</span>
+          <span className="sr-only">{isLive ? t("watchLive") : t("openTournament")}</span>
           <ArrowRight
             size={16}
             aria-hidden
-            className="text-fg-subtle transition-transform group-hover:translate-x-0.5"
+            className="shrink-0 text-fg-subtle transition-transform group-hover:translate-x-0.5"
           />
-        </div>
+        </dl>
       </Card>
     </Link>
   );

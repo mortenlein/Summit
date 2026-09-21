@@ -85,7 +85,6 @@
     "label": "Player profile",
     "signInTitle": "Sign in to see your profile",
     "signInBody": "Your teams, the tournaments you're in, and the seat each of them knows you by.",
-    "statOpenMatches": "{count, plural, one {<n>#</n> open match} other {<n>#</n> open matches}}",
     "loading": "Loading your tournaments…",
     "emptyTitle": "No tournaments yet",
     "emptyBody": "Sign up for one and it shows up here with your team and your seat.",

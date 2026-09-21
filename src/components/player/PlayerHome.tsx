@@ -6,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ArrowRight } from 'lucide-react';
 import { isCalled, isLive } from '@/lib/match-status';
 import { Button, Card, Badge } from '@/components/ui';
-import { MyQueue, hasCallCard, useMyQueue, type QueueEntry } from '@/components/player/MyQueue';
+import { MyQueue, StateChip, hasCallCard, useMyQueue, type QueueEntry } from '@/components/player/MyQueue';
 import { EnableAlertsButton } from '@/components/player/EnableAlertsButton';
 import { SeatEditor } from '@/components/player/SeatEditor';
 
@@ -115,22 +115,6 @@ export function PlayerHome({
       </main>
     </div>
   );
-}
-
-/** What the queue says about a tournament, as a chip on its card. Never a raw state enum. */
-function StateChip({ entry }: { entry?: QueueEntry }) {
-  const t = useTranslations('player');
-  if (!entry) return null;
-  if (entry.state === 'OUT') return <Badge tone="done">{t('chip.knockedOut')}</Badge>;
-  if (entry.state === 'NO_BRACKET' || entry.state === 'AWAITING_DRAW') {
-    return <Badge tone="neutral">{t('chip.notDrawn')}</Badge>;
-  }
-  const status = (entry.nextMatch?.status || '').toUpperCase();
-  if (isLive(status)) return <Badge tone="live">{t('chip.playingNow')}</Badge>;
-  if (isCalled(status)) return <Badge tone="ready">{t('chip.youreUp')}</Badge>;
-  if (entry.matchesAhead === 0) return <Badge tone="ready">{t('chip.upNext')}</Badge>;
-  if (entry.matchesAhead === null) return null;
-  return <Badge tone="neutral">{t('chip.matchesAhead', { count: entry.matchesAhead })}</Badge>;
 }
 
 function TournamentList({

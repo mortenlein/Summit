@@ -215,6 +215,10 @@ export default async function Home() {
     // Live tournaments first: what is running now outranks what was created most recently.
     .sort((a, b) => (a.stage === "LIVE" ? 0 : 1) - (b.stage === "LIVE" ? 0 : 1));
 
+  // Same rule as the directory, so the two boards do not diverge: the game eyebrow only earns
+  // its row when the board actually holds more than one game.
+  const multiGameBoard = new Set(tournaments.map((row) => row.game)).size > 1;
+
   return (
     <div className="flex min-h-screen flex-col bg-page text-fg">
       {/* No eyebrow. It was the literal "CS2 LAN-TURNERINGER" while games.ts ships five games
@@ -352,7 +356,7 @@ export default async function Home() {
                   <TournamentCard
                     href={`/tournaments/${card.id}`}
                     name={card.name}
-                    game={card.game}
+                    game={multiGameBoard ? card.game : undefined}
                     format={card.format}
                     roster={card.roster}
                     teamCount={card.teamCount}

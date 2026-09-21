@@ -55,11 +55,22 @@ export default function TournamentsOverviewClient() {
     router.replace(`${pathname}?${params.toString()}`);
   };
 
-  const matchesSearch = (row: DirectoryRow) =>
-    row.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    row.game.toLowerCase().includes(searchQuery.toLowerCase());
+  // Match the name the card *prints* as well as the enum behind it. The card showed
+  // "Counter-Strike 2" while this only tested `row.game` ("CS2"), so a kid typing "counter" got
+  // the no-results state for a board full of Counter-Strike.
+  const matchesSearch = (row: DirectoryRow) => {
+    const q = searchQuery.toLowerCase();
+    if (!q) return true;
+    return (
+      row.name.toLowerCase().includes(q) ||
+      row.game.toLowerCase().includes(q) ||
+      (getGameMetadata(row.game)?.name || "").toLowerCase().includes(q)
+    );
+  };
 
   const searched = tournaments.filter(matchesSearch);
+  /** More than one game on the *unfiltered* board, so the eyebrow says something. */
+  const multiGame = new Set(tournaments.map((row) => row.game)).size > 1;
   const filtered = stageFilter
     ? searched.filter((row) => String(row.stage || "").toUpperCase() === stageFilter)
     : searched;
@@ -171,7 +182,7 @@ export default function TournamentsOverviewClient() {
                   <TournamentCard
                     href={`/tournaments/${row.id}`}
                     name={row.name}
-                    game={gameMeta?.name || row.game}
+                    game={multiGame ? gameMeta?.name || row.game : undefined}
                     format={row.format === "DOUBLE_ELIMINATION" ? "Double elim" : "Single elim"}
                     roster={teamSizeLabel(gameMeta, row.teamSize)}
                     teamCount={row._count?.teams ?? 0}

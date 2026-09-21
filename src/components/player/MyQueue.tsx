@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Radio, Hourglass, AlertTriangle, RefreshCw, Zap, ArrowRight, Trophy, Clock } from 'lucide-react';
-import { Button, Card, StatusBadge, EmptyState } from '@/components/ui';
+import { Badge, Button, Card, StatusBadge, EmptyState } from '@/components/ui';
 import { isCalled, isLive } from '@/lib/match-status';
 import { buildSteamConnectUrl } from '@/lib/match-links';
 import { clientApi } from '@/lib/client-api';
@@ -291,6 +291,29 @@ function CardSkeleton() {
  * on the first frame and the /api/me/queue round-trip only adds the queue position to it — the
  * player never watches a skeleton where the answer was already on screen.
  */
+/**
+ * What the queue says about a tournament, as a chip on its card. Never a raw state enum.
+ *
+ * It lives here, next to `useMyQueue`, because both the desk and the profile page render it and
+ * both need the same answer. The profile page used to print a `statOpenMatches` counter
+ * instead, which came from `status: { not: 'COMPLETED' }` — so "being called right now" and
+ * "three rounds away" rendered as the same number.
+ */
+export function StateChip({ entry }: { entry?: QueueEntry }) {
+  const t = useTranslations('player');
+  if (!entry) return null;
+  if (entry.state === 'OUT') return <Badge tone="done">{t('chip.knockedOut')}</Badge>;
+  if (entry.state === 'NO_BRACKET' || entry.state === 'AWAITING_DRAW') {
+    return <Badge tone="neutral">{t('chip.notDrawn')}</Badge>;
+  }
+  const status = (entry.nextMatch?.status || '').toUpperCase();
+  if (isLive(status)) return <Badge tone="live">{t('chip.playingNow')}</Badge>;
+  if (isCalled(status)) return <Badge tone="ready">{t('chip.youreUp')}</Badge>;
+  if (entry.matchesAhead === 0) return <Badge tone="ready">{t('chip.upNext')}</Badge>;
+  if (entry.matchesAhead === null) return null;
+  return <Badge tone="neutral">{t('chip.matchesAhead', { count: entry.matchesAhead })}</Badge>;
+}
+
 /**
  * Does this tournament already have a call card on the desk?
  *
