@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
-import { Users, Search, ArrowRight } from "lucide-react";
+import { Search, ArrowRight } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 interface TeamRegistryProps {
@@ -18,21 +18,14 @@ export function TeamRegistry({ teams, onViewTeam }: TeamRegistryProps) {
   const filteredTeams = teams.filter((t: any) =>
     t.name.toLowerCase().includes(search.toLowerCase())
   );
-  const playerCount = teams.reduce((total: number, t: any) => total + (t.players?.length || 0), 0);
-
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col gap-4 border-b border-line pb-6 md:flex-row md:items-end md:justify-between">
         <div>
+          {/* No counts line. It said "8 påmeldt · 40 spillere" over a grid the kid can count,
+              and it read `teams` rather than `filteredTeams` — so searching "nord" left it
+              insisting there were still 8. */}
           <h2 className="m-0 text-2xl font-bold tracking-tight">{tCommon("teams")}</h2>
-          {/* Counts, not a sentence that says nothing ("Verified participants currently…"). */}
-          <p className="m-0 mt-1 text-sm text-fg-muted">
-            {t.rich("registry.counts", {
-              teams: teams.length,
-              players: playerCount,
-              n: (chunks) => <span className="mds-numeric">{chunks}</span>,
-            })}
-          </p>
         </div>
         <div className="group relative w-full md:w-80">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-subtle transition-colors group-focus-within:text-brand" />
@@ -53,13 +46,14 @@ export function TeamRegistry({ teams, onViewTeam }: TeamRegistryProps) {
             className="mds-card flex flex-col gap-4 p-5 transition-colors hover:border-brand"
           >
             <div className="flex items-start gap-3">
-              <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded border border-line bg-field">
-                {team.logoUrl ? (
+              {/* Only when there is something to show. An empty bordered box with a grey glyph
+                  in it spent ~52px of every card saying "no picture uploaded", and pushed the
+                  player-count badge at the card's right edge. */}
+              {team.logoUrl && (
+                <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded">
                   <Image src={team.logoUrl} alt="" fill className="object-contain p-1.5" />
-                ) : (
-                  <Users size={16} className="absolute inset-0 m-auto text-fg-subtle" />
-                )}
-              </div>
+                </div>
+              )}
               {/* min-w-0 + a wrapping name: the badge no longer gets pushed off the card edge. */}
               <div className="min-w-0 flex-1">
                 <h3 className="mds-name-lg m-0 text-base leading-snug">{team.name}</h3>
@@ -114,8 +108,12 @@ export function TeamRegistry({ teams, onViewTeam }: TeamRegistryProps) {
         ))}
       </div>
 
+      {/* Two different nothings. "Ingen treff på «»" for a tournament nobody has signed up to
+          yet is a search result for a search the kid never ran. */}
       {filteredTeams.length === 0 && (
-        <p className="text-sm text-fg-muted">{t("registry.noMatch", { search })}</p>
+        <p className="text-sm text-fg-muted">
+          {search.trim() ? t("registry.noMatch", { search }) : t("registry.empty")}
+        </p>
       )}
     </div>
   );

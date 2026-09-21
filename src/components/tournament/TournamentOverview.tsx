@@ -2,7 +2,7 @@
 
 import React from "react";
 import Image from "next/image";
-import { Users, ArrowRight, Trophy } from "lucide-react";
+import { ArrowRight, Trophy } from "lucide-react";
 import { useTranslations } from "next-intl";
 import LiveMatchCard from "@/components/LiveMatchCard";
 import { isDone, isLive, byPlayOrder } from "@/lib/match-status";
@@ -29,6 +29,8 @@ export function TournamentOverview({
   const tStage = useTranslations("stage");
   const tCommon = useTranslations("common");
   const progress = currentStageProgress(matches, tStage);
+  /** One answer for the whole chip grid — see the comment where the chips are rendered. */
+  const anyTeamLogo = teams.some((team: any) => Boolean(team.logoUrl));
   const upNext = matches
     .filter((m: any) => !isDone(m.status) && !isLive(m.status))
     .sort(byPlayOrder)
@@ -73,6 +75,7 @@ export function TournamentOverview({
                 key={match.id}
                 match={match}
                 tournamentId={tournament.id}
+                category={tournament.category}
                 stageName={stageName(match, matches, tStage)}
               />
             ))}
@@ -136,22 +139,26 @@ export function TournamentOverview({
           </div>
         ) : null}
 
-        {/* Teams as named chips: a grid of anonymous logo squares told a spectator nothing. */}
+        {/* Teams as named chips: a grid of anonymous logo squares told a spectator nothing.
+            The logo slot is decided once for the whole grid — if no team in this tournament
+            uploaded one, it is gone for all of them; if any did, it is held empty for all.
+            Deciding chip by chip is what ships a ragged left edge down three columns. The chips
+            are also taller than they were, because at ~36px they were under a thumb. */}
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
           {teams.map((team: any) => (
             <button
               key={team.id}
               type="button"
               onClick={() => onViewTeam(team)}
-              className="flex items-center gap-3 rounded border border-line bg-field px-3 py-2 text-left transition-colors hover:border-brand"
+              className="mds-tap flex min-h-11 items-center gap-3 rounded border border-line bg-field px-3 py-2.5 text-left transition-colors hover:border-brand"
             >
-              <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-sm bg-page">
-                {team.logoUrl ? (
-                  <Image src={team.logoUrl} alt="" fill className="object-contain p-0.5" />
-                ) : (
-                  <Users size={12} className="absolute inset-0 m-auto text-fg-subtle" />
-                )}
-              </div>
+              {anyTeamLogo && (
+                <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-sm">
+                  {team.logoUrl && (
+                    <Image src={team.logoUrl} alt="" fill className="object-contain p-0.5" />
+                  )}
+                </div>
+              )}
               <span className="mds-name min-w-0 flex-1 text-[13px]">{team.name}</span>
               {team.seed ? (
                 <span className="mds-numeric shrink-0 text-[11px] text-fg-subtle">

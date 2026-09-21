@@ -85,13 +85,13 @@
     "none": "No matches yet — the bracket has not been generated."
   },
   "registry": {
-    "counts": "<n>{teams}</n> registered · <n>{players}</n> players",
     "searchPlaceholder": "Search teams...",
     "seed": "Seed <n>{seed}</n>",
     "seedEmpty": "Seed —",
     "playerBadge": "{count} PLAYERS",
     "details": "Details",
-    "noMatch": "No teams match “{search}”."
+    "noMatch": "No teams match “{search}”.",
+    "empty": "No teams signed up yet."
   },
   "overlay": {
     "loading": "Loading Bracket...",

@@ -85,11 +85,12 @@ test('matches tab groups every round and states each match status', async ({ pag
   const playedScores = board.getByTestId(`public-match-${playedMatches[0].id}`).locator('span.mds-numeric');
   await expect(playedScores.nth(0)).toHaveText('1');
   await expect(playedScores.nth(1)).toHaveText('0');
-  // A live match links to the bracket — and says so. It used to offer "Watch Stream", which
-  // opened the transparent OBS overlay; no stream URL exists anywhere in the schema.
-  const liveLink = board.getByTestId(`public-match-${liveMatch!.id}`).getByRole('link');
-  await expect(liveLink).toHaveText(/Open bracket view/i);
-  await expect(liveLink).toHaveAttribute('href', /tab=bracket/);
+  // A live match carries no bracket link of its own. The bottom tab bar already has Bracket,
+  // with the same word, the same icon and the same destination — no match id was ever passed —
+  // and that duplicate was pushing the call-up status of the match below it toward the fold.
+  // (It used to offer "Watch Stream", which opened the transparent OBS overlay; no stream URL
+  // exists anywhere in the schema, and neither control should come back.)
+  await expect(board.getByTestId(`public-match-${liveMatch!.id}`).getByRole('link')).toHaveCount(0);
   await expect(board.getByRole('link', { name: /Watch Stream/i })).toHaveCount(0);
 
   const liveCard = board.locator('div.mds-card').filter({ hasText: teamName(teams, liveMatch!.homeTeamId) }).first();

@@ -2,10 +2,8 @@
 
 import React from "react";
 import Image from "next/image";
-import { Trophy, Layout } from "lucide-react";
-import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { byPlayOrder, isLive, matchStatusKey } from "@/lib/match-status";
+import { byPlayOrder, isDone, isLive, matchStatusKey } from "@/lib/match-status";
 import { matchRef, matchStatusTone, slotLabel, stageName } from "./match-labels";
 
 interface MatchListProps {
@@ -13,15 +11,37 @@ interface MatchListProps {
   tournamentId: string;
 }
 
-function TeamRow({ team, name, score, won, dim }: { team: any; name: string; score: number; won: boolean; dim: boolean }) {
+/**
+ * One side of a match.
+ *
+ * The logo slot is held for every row in the list, empty and borderless when a team has no
+ * logo — a bordered box with a grey trophy in it was ~36px of a phone card spent saying "this
+ * team did not upload a picture", and conditioning the slot row by row instead ships a ragged
+ * left edge down the card.
+ *
+ * `showScore` is decided by the caller from the match, not from this row: a match with no
+ * result prints nothing rather than a `0`, and nothing rather than a dash — an em dash is
+ * another glyph to read, and it is not what a score looks like.
+ */
+function TeamRow({
+  team,
+  name,
+  score,
+  won,
+  dim,
+  showScore,
+}: {
+  team: any;
+  name: string;
+  score: number;
+  won: boolean;
+  dim: boolean;
+  showScore: boolean;
+}) {
   return (
     <div className="flex items-center gap-2.5">
-      <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-sm border border-line bg-page">
-        {team?.logoUrl ? (
-          <Image src={team.logoUrl} alt="" fill className="object-contain p-0.5" />
-        ) : (
-          <Trophy size={12} className="absolute inset-0 m-auto text-fg-subtle opacity-50" />
-        )}
+      <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-sm">
+        {team?.logoUrl && <Image src={team.logoUrl} alt="" fill className="object-contain p-0.5" />}
       </div>
       <span
         className={`mds-name min-w-0 flex-1 text-[13px] ${
@@ -30,13 +50,13 @@ function TeamRow({ team, name, score, won, dim }: { team: any; name: string; sco
       >
         {name}
       </span>
-      <span
-        className={`mds-numeric text-lg font-bold ${
-          won ? "text-brand" : "text-fg-subtle"
-        }`}
-      >
-        {score}
-      </span>
+      {showScore && (
+        <span
+          className={`mds-numeric text-lg font-bold ${won ? "text-brand" : "text-fg-subtle"}`}
+        >
+          {score}
+        </span>
+      )}
     </div>
   );
 }
@@ -79,6 +99,11 @@ export function MatchList({ matches, tournamentId }: MatchListProps) {
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               {roundMatches.map((match: any) => {
                 const live = isLive(match.status);
+                // "Has a result", not "is live or done". A match reopened for a replay keeps its
+                // scores while its status goes back to READY, and a status string nobody
+                // enumerated must never be able to hide a score that exists.
+                const hasResult =
+                  live || isDone(match.status) || match.homeScore !== 0 || match.awayScore !== 0;
                 const homeWon = Boolean(match.winnerId) && match.winnerId === match.homeTeam?.id;
                 const awayWon = Boolean(match.winnerId) && match.winnerId === match.awayTeam?.id;
 
@@ -113,6 +138,7 @@ export function MatchList({ matches, tournamentId }: MatchListProps) {
                         score={match.homeScore}
                         won={homeWon}
                         dim={awayWon}
+                        showScore={hasResult}
                       />
                       <TeamRow
                         team={match.awayTeam}
@@ -120,18 +146,10 @@ export function MatchList({ matches, tournamentId }: MatchListProps) {
                         score={match.awayScore}
                         won={awayWon}
                         dim={homeWon}
+                        showScore={hasResult}
                       />
                     </div>
 
-                    {live && (
-                      <Link
-                        href={`/tournaments/${tournamentId}?tab=bracket`}
-                        className="mds-btn-secondary h-9 w-full text-xs"
-                      >
-                        <Layout size={14} />
-                        {t("bracket.open")}
-                      </Link>
-                    )}
                   </div>
                 );
               })}
