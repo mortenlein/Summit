@@ -447,6 +447,16 @@ ran `/koble`; a player showing *blokkert* has direct messages from server member
 in their own Discord settings (Discord error 50007) — the bot cannot get past that, and the
 crew fetches them in person. Which is what the crew does anyway.
 
+**Every player shows as unreached at once, and the log says `CONFIG BREAKER TRIPPED`.** That is
+the site refusing to keep asking. A rejected token, or a bot that is not in the guild, is the
+same answer for every kid, and repeating it forty times per call-up is how an application gets
+banned from Discord for an hour. Look at `DiscordLink.dmError` on the reach panel: one player
+will say what Discord actually answered (`invalid_token`, `missing_access`) and the rest will
+say the same thing with a `breaker_` prefix, meaning nothing was sent for them. Fix the cause —
+usually a token pasted into only one of the two env files, or the bot never invited to the
+guild — and wait five minutes. It heals on its own; no restart, no deploy. Run the floor on the
+marshal board in the meantime, which is what it is for.
+
 **Is Discord itself having a bad day?** Check https://discordstatus.com — that is the
 authoritative answer, and it takes ten seconds. From the box: `docker logs --tail 30
 summit-bot` showing repeated "Gateway connect failed" with a network error, or

@@ -117,7 +117,8 @@ model DiscordDmAttempt {
   discordId   String
   event       String            // LINK_PROBE | MATCH_CALLED | MATCH_LIVE
   matchId     String?           // null for LINK_PROBE
-  outcome     String            // SENT | BLOCKED | UNKNOWN_USER | RATE_LIMITED | ERROR | SKIPPED_OPTOUT
+  outcome     String            // PENDING | SENT | MOCKED | BLOCKED | UNKNOWN_USER
+                                // | RATE_LIMITED | ERROR | SKIPPED_OPTOUT | SKIPPED_DISABLED
   discordCode Int?              // Discord's JSON error code, e.g. 50007
   locale      String
   createdAt   DateTime @default(now())
@@ -291,14 +292,31 @@ if (dmEnabled(tournament)) void sendMatchDms(match, status).catch(() => {});
 |---|---|---|---|
 | 200/204 | — | accepted | `outcome = SENT`, `dmState = SENT`, `dmCheckedAt = now` |
 | **403** | **50007** | Cannot send messages to this user | **Terminal. One attempt. Never retried, ever.** `dmState = BLOCKED`. Indistinguishable between "DMs off", "blocked the bot" and "left the guild" — the UI must never claim a cause |
-| 403 | 50001 | Missing Access | Terminal + **config alarm**: the bot is probably not in the guild. Do not retry per-user |
+| 403 | 50001 | Missing Access | Terminal + **trips the config breaker**: the bot is probably not in the guild, which is not a per-player problem |
 | 404 | 10013 | Unknown User | Terminal. Clear `dmChannelId`, prompt re-link |
 | 404 | 10003 | Unknown Channel | Stale cache. Clear `dmChannelId`, **one** retry that re-opens. *This is the one place a retry is correct and the easy one to forget* |
-| 429 | — | rate limited | Honour `retry_after` from the body, not a fixed backoff. `X-RateLimit-Scope: global` pauses the whole fan-out. Max 2 retries, then `RATE_LIMITED` |
-| 401 | 50014 | invalid token | Stop the loop, log `FATAL` once then at most once a minute, surface on the health chip |
+| 429 | — | rate limited | Honour `retry_after` from the body, not a fixed backoff. Max 2 retries, then `RATE_LIMITED`. `X-RateLimit-Scope: global` **trips the config breaker** — pressing on through the roster is what turns a throttle into a ban |
+| 401 | 50014 | invalid token | **Trips the config breaker.** Log `FATAL`, stop every send in the process, surface on the health chip |
 | 5xx | — | Discord is having a day | 2s → 8s, then `ERROR` |
 
 Retrying 50007 across forty players is the realistic path to Discord's documented **10,000 invalid responses (401/403/429) in 10 minutes → one-hour IP ban**. That is an hour of nothing, on LAN day, for a setting the kid chose.
+
+#### The config breaker — as shipped
+
+`401`, `50001` and a global `429` are the same answer for every recipient. The first build
+treated them as terminal *for that recipient* and carried on to the next, so one typo'd token
+meant one rejected request per player, per call-up, all day — the realistic path to the ban
+above.
+
+The first such rejection now stops every send in the process for five minutes
+(`DISCORD_DM_BREAKER_MS` shortens it for the e2e harness; production never sets it). Remaining
+recipients still get their attempt row, because those kids really were not reached, with
+`DiscordLink.dmError` prefixed `breaker_` — so the record distinguishes *Discord told us this*
+from *we already knew and did not ask again*. That distinction is the one somebody needs at
+02:00 when forty players show as unreached.
+
+The cooldown is why it heals: invite the bot to the guild, wait it out, and the next call-up
+tries again. No container restart, no deploy.
 
 **Keep `dmChannelId` as a latency cache, not as a safety argument.** `POST /users/@me/channels` is the scarce route and opening many new DM channels to accounts that never interacted with the bot is a known anti-spam flag vector — but the thing that actually keeps us safe is that we never DM more than one match's roster. Cache it because it halves the calls; do not rest the design on it.
 
