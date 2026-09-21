@@ -38,8 +38,12 @@ export async function POST(req: Request) {
         const matchUrl = `${process.env.NEXTAUTH_URL}/tournaments/${tournamentId}`;
 
         if (type === 'START') {
-            const homePlayers = (match.homeTeam?.players || []).map(p => `${p.nickname || p.name} (${p.seating || '?'})`).join(', ');
-            const awayPlayers = (match.awayTeam?.players || []).map(p => `${p.nickname || p.name} (${p.seating || '?'})`).join(', ');
+            // Names only — never `(seating)`. A Discord channel is readable by everyone in the
+            // server (and screenshot-able out of it), and this embed named 12-year-olds next to
+            // their real-time physical location in the hall. A seat is a private instruction to
+            // the one player it belongs to; it goes in that player's DM and nowhere else.
+            const homePlayers = (match.homeTeam?.players || []).map(p => p.nickname || p.name).join(', ');
+            const awayPlayers = (match.awayTeam?.players || []).map(p => p.nickname || p.name).join(', ');
 
             await announceMatch({
                 homeTeam: match.homeTeam?.name || 'TBD',
