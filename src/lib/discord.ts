@@ -12,6 +12,14 @@ export interface MockNotification {
 }
 
 type AnnouncementType = 'MATCH' | 'RESULT' | 'SIGNUP';
+
+/**
+ * What actually became of an announcement. A boolean cannot carry this: "it did not get
+ * delivered" is three different facts, and the audit trail has to be able to tell an organizer
+ * which one — Discord rejected it, nothing is configured so nothing was posted, or it was
+ * already announced and deliberately not repeated.
+ */
+export type AnnounceOutcome = 'DELIVERED' | 'MOCK' | 'FAILED' | 'DUPLICATE';
 type TournamentEmbed = APIEmbed & { tournamentId?: string };
 
 /**
@@ -266,25 +274,25 @@ class DiscordClient {
     const claim = options.once
       ? await this.claimOnce(logEmbed, type)
       : await this.writeLog(logEmbed, type);
-    if (options.once && !claim) return false;
+    if (options.once && !claim) return 'DUPLICATE';
 
-    const finish = async (delivered: boolean) => {
-      if (!claim) return delivered;
-      if (delivered) {
-        if (!options.once) await this.markDelivered(claim.id);
-      } else if (options.once) {
-        await this.releaseClaim(claim.id);
+    const finish = async (outcome: AnnounceOutcome): Promise<AnnounceOutcome> => {
+      if (!claim) return outcome;
+      if (outcome === 'FAILED') {
+        if (options.once) await this.releaseClaim(claim.id);
+      } else if (!options.once) {
+        await this.markDelivered(claim.id);
       }
-      return delivered;
+      return outcome;
     };
 
     if (isMockMode || !isProdReady) {
       if (simulatedAnnounceFailure()) {
         console.log(`[STRATEGY 3 MOCK] ${type} notification simulated as FAILED:`, logEmbed.title);
-        return finish(false);
+        return finish('FAILED');
       }
       console.log(`[STRATEGY 3 MOCK] ${type} notification intercepted:`, logEmbed.title);
-      return finish(true);
+      return finish('MOCK');
     }
 
     const locale = discordLocale();
@@ -295,7 +303,7 @@ class DiscordClient {
             await getServerTranslations(locale, 'notifications'),
             await getServerTranslations(locale, 'stage')
           );
-    return finish(await this.executeRealDelivery(embed));
+    return finish((await this.executeRealDelivery(embed)) ? 'DELIVERED' : 'FAILED');
   }
 
   async announceMatch(data: {
@@ -538,10 +546,10 @@ class DiscordClient {
 
 const discordClient = new DiscordClient();
 
-export const announceMatch = (data: any) => discordClient.announceMatch(data);
+export const announceMatch = (data: any): Promise<AnnounceOutcome> => discordClient.announceMatch(data);
 export const announceMatchLive = (data: any) => discordClient.announceMatchLive(data);
 export const announceMatchUpcoming = (data: any) => discordClient.announceMatchUpcoming(data);
-export const announceResult = (data: any) => discordClient.announceResult(data);
+export const announceResult = (data: any): Promise<AnnounceOutcome> => discordClient.announceResult(data);
 export const announceTournamentUpdate = (data: any) => discordClient.announceTournamentUpdate(data);
 export const announceSignup = (data: any) => discordClient.announceSignup(data);
 

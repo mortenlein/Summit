@@ -16,6 +16,14 @@ import {
   complete,
 } from './helpers/lan-seed';
 import { mintSessionToken, personaUserId } from './helpers/auth';
+import {
+  DiscordDmError,
+  mockDmTransport,
+  resetDmBreaker,
+  restDmTransport,
+  sendDirectMessage,
+  type DmTransport,
+} from '@/lib/discord-dm';
 
 /**
  * Discord DMs — the channel that actually reaches these players. They are 12–15, they are at
@@ -568,4 +576,112 @@ test('a rejected bot token stops the fan-out instead of repeating itself per pla
   expect((await mia.post(`/api/matches/${later.id}/load`)).status()).toBe(200);
   await expect.poll(async () => (await settled(later.id)).length).toBe(2);
   expect((await readDmAttempts(later.id)).every((row) => row.outcome === 'MOCKED')).toBe(true);
+});
+
+test('a re-run of the fan-out after a restart puts nothing more on a kid’s phone', async () => {
+  const { match } = await linkedMatch();
+  const mia = await apiAs('mia');
+
+  expect((await mia.post(`/api/matches/${match.id}/load`)).status()).toBe(200);
+  await expect.poll(async () => (await settled(match.id)).length).toBe(2);
+  resetDmLog();
+
+  // The route-level guard above is the cheap one; this is the durable one. Put the match back to
+  // PENDING — the shape of a crash mid-fan-out, a restore, or staff resetting a match — so the
+  // route guard passes and the *whole* fan-out runs again against rows that already exist.
+  // `@@unique([matchId, event, userId])` is claimed before the send, so it finds the slot taken.
+  await prisma.match.update({ where: { id: match.id }, data: { status: 'PENDING' } });
+
+  expect((await mia.post(`/api/matches/${match.id}/load`)).status()).toBe(200);
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  expect(await readDmAttempts(match.id)).toHaveLength(2);
+  expect(dmLines()).toHaveLength(0);
+});
+
+/**
+ * The transport seam, exercised in-process.
+ *
+ * Every test above drives the sender through HTTP, which is the right way to prove the fan-out
+ * but leaves the seam itself unproven - `DmTransport` is only worth having if a caller can
+ * genuinely hand in its own and see the exact bytes, and if Discord can be made to refuse in a
+ * named way without a token and without a real kid who has DMs switched off.
+ *
+ * This also pins the half of the module that production cannot reach today: a *real* transport
+ * returning success is the only thing in the system allowed to write `SENT`.
+ */
+test('the transport is a real seam: an injected one sees the exact bytes, and 50007 is terminal', async () => {
+  const userId = await personaUserId('leo');
+  await clearDiscordLink(userId);
+  const link = await linkDiscord(userId);
+  const stamp = Date.now().toString(36);
+  const content = 'Seat A12 - go there now. You are up.';
+
+  // 1. A real transport that succeeds. This is the one and only path to `SENT`.
+  const opened: string[] = [];
+  const sent: { channelId: string; discordId: string; content: string }[] = [];
+  const recorder: DmTransport = {
+    real: true,
+    async openDmChannel(discordId) {
+      opened.push(discordId);
+      return `chan-${discordId}`;
+    },
+    async sendDm(channelId, discordId, body) {
+      sent.push({ channelId, discordId, content: body });
+    },
+  };
+
+  const ok = await sendDirectMessage(
+    { userId, discordId: link.discordId, event: 'MATCH_CALLED', matchId: `inj-ok-${stamp}`, locale: 'en', content },
+    recorder
+  );
+  expect(ok.outcome).toBe('SENT');
+  expect(opened).toEqual([link.discordId]);
+  // The whole observable contract of a DM: who it went to, and the exact text.
+  expect(sent).toEqual([{ channelId: `chan-${link.discordId}`, discordId: link.discordId, content }]);
+  expect((await readDiscordLink(userId))!.dmState).toBe('SENT');
+
+  // 2. The same (match, event, player) again writes nothing and sends nothing - the unique row
+  //    is the guard, and it holds whether the second attempt is a double tap or a restart.
+  const again = await sendDirectMessage(
+    { userId, discordId: link.discordId, event: 'MATCH_CALLED', matchId: `inj-ok-${stamp}`, locale: 'en', content },
+    recorder
+  );
+  expect(again.attempted).toBe(false);
+  expect(again.outcome).toBe('SENT');
+  expect(sent).toHaveLength(1);
+
+  // 3. Discord refuses with 50007 - the kid's own privacy setting. One attempt, no retry ever,
+  //    and the link carries the refusal so the next match skips them instead of earning a
+  //    second 403 (forty of those is the documented path to an hour-long IP ban).
+  let refusals = 0;
+  const refusing: DmTransport = {
+    real: true,
+    async openDmChannel(discordId) {
+      return `chan-${discordId}`;
+    },
+    async sendDm() {
+      refusals += 1;
+      throw new DiscordDmError(403, 50007);
+    },
+  };
+  const blocked = await sendDirectMessage(
+    { userId, discordId: link.discordId, event: 'MATCH_LIVE', matchId: `inj-blocked-${stamp}`, locale: 'en', content },
+    refusing
+  );
+  expect(blocked.outcome).toBe('BLOCKED');
+  expect(blocked.discordCode).toBe(50007);
+  expect(refusals).toBe(1);
+  expect((await readDiscordLink(userId))!.dmState).toBe('BLOCKED');
+
+  // 4. The mock transport still works with no token - and still refuses to call it `SENT`.
+  const mocked = await sendDirectMessage(
+    { userId, discordId: link.discordId, event: 'MATCH_CALLED', matchId: `inj-mock-${stamp}`, locale: 'en', content },
+    mockDmTransport()
+  );
+  expect(mocked.outcome).toBe('MOCKED');
+  expect(mockDmTransport().real).toBe(false);
+  expect(restDmTransport().real).toBe(true);
+
+  await clearDiscordLink(userId);
+  resetDmBreaker();
 });

@@ -22,7 +22,10 @@ import { isCalled, isDone, isLive } from '@/lib/match-status';
  *   PENDING   → the real call. Reset check-in, broadcast, notify, audit.
  *   READY     → 200, and almost nothing else. Re-broadcast for any client whose stream dropped,
  *               but do NOT reset check-in: by the second tap a marshal may already have walked
- *               the row ticking players in, and wiping that costs them the walk.
+ *               the row ticking players in, and wiping that costs them the walk. And do not
+ *               re-run the notification fan-out: the broadcast is idempotent state, a
+ *               notification is an event, and web push has no dedupe of its own — a second tap
+ *               would buzz every kid's phone a second time for a call that already happened.
  *   LIVE      → 409. The match is being played; rewinding it to READY would flip the overlay
  *               back to CALLED and re-open scoring's door. The marshal board hides the button
  *               here, so this can only be a stale client.
@@ -94,8 +97,11 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
         eventBus.emit(`match:${updated.id}`, payload);
         eventBus.emit(`tournament:${updated.tournamentId}`, payload);
 
-        // Push + in-app log + Discord announce, all best-effort inside notifyMatchReady.
-        await notifyMatchReady(updated.id, 'READY');
+        // Push + in-app log + Discord announce, all best-effort inside notifyMatchReady. Only on
+        // a real call — see the status table above.
+        if (!recall) {
+            await notifyMatchReady(updated.id, 'READY');
+        }
 
         // A re-call is its own action in the log. Writing `match.loaded` twice would read as two
         // separate calls of the same match, which is exactly what an audit trail must not invent.

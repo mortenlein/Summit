@@ -140,6 +140,38 @@ async function totalRoundsFor(tournamentId: string): Promise<number> {
 }
 
 /**
+ * One up-next decision at a time, per tournament.
+ *
+ * `announceUpcomingMatch` is triggered from three places (a call-up, a result, an advancement)
+ * and two of them fire it detached. Its "at most once per match" guard is a read of
+ * `NotificationLog` followed by a write, which is not atomic — two triggers landing together
+ * both read "not announced" and both post. On a LAN that is the same match announced twice in
+ * the channel, which is precisely what teaches a room to stop reading up-next posts.
+ *
+ * Serialising per tournament closes it inside the process, which is where every trigger lives
+ * (one Next server, no queue by design — spec §1). It is the cheap layer: it stops two triggers
+ * doing the same work at all. The durable layer is `NotificationLog.dedupeKey`, which is unique,
+ * so even a race this lock cannot see (two processes, a restart mid-flight) still resolves to
+ * one post.
+ */
+const upcomingLocks = new Map<string, Promise<unknown>>();
+
+function serializePerTournament<T>(tournamentId: string, task: () => Promise<T>): Promise<T> {
+  const previous = upcomingLocks.get(tournamentId) ?? Promise.resolve();
+  const run = previous.then(task, task);
+  // Release the slot once nothing is queued behind it, so this never grows with the draw.
+  const settled = run.then(
+    () => undefined,
+    () => undefined
+  );
+  upcomingLocks.set(tournamentId, settled);
+  void settled.then(() => {
+    if (upcomingLocks.get(tournamentId) === settled) upcomingLocks.delete(tournamentId);
+  });
+  return run;
+}
+
+/**
  * Announce the match that is now at the front of the running order — owner ask #1.
  *
  * **What "upcoming" means here, precisely:** the single match that (a) has *both* teams known,
@@ -161,6 +193,10 @@ async function totalRoundsFor(tournamentId: string): Promise<number> {
  * Cheap to call after any event that moves the queue (a call, a result, an advancement).
  */
 export async function announceUpcomingMatch(tournamentId: string) {
+  return serializePerTournament(tournamentId, () => announceUpcomingMatchNow(tournamentId));
+}
+
+async function announceUpcomingMatchNow(tournamentId: string) {
   try {
     const matches = await prisma.match.findMany({
       where: { tournamentId },
