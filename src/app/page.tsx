@@ -217,8 +217,10 @@ export default async function Home() {
 
   return (
     <div className="flex min-h-screen flex-col bg-page text-fg">
+      {/* No eyebrow. It was the literal "CS2 LAN-TURNERINGER" while games.ts ships five games
+          and this page's own query selects each tournament's game — so a Fortnite bracket sat
+          under a header announcing CS2. The h1 stays: it is the only one on the page. */}
       <PageHeader
-        eyebrow={t("eyebrow")}
         title={
           <>
             Summit
@@ -311,14 +313,13 @@ export default async function Home() {
         {/* ---- The tournament board. ---- */}
         <section aria-labelledby="board-heading" className="flex flex-1 flex-col gap-4">
           <div className="mds-section-head">
-            <div className="flex items-center gap-3">
-              <h2 id="board-heading" className="mds-uppercase-label text-fg">
-                {tc("tournaments")}
-              </h2>
-              <Badge tone="neutral" className="mds-tabular">
-                {t("listed", { count: tournaments.length })}
-              </Badge>
-            </div>
+            {/* No count pill: this board is capped at nine rows, so the number it printed was
+                not the number of tournaments that exist. If it ever truncates, the honest thing
+                to say is "+3 til", not a total. Losing the pill also gives "Se alle →" its room
+                back on a phone. */}
+            <h2 id="board-heading" className="mds-uppercase-label text-fg">
+              {tc("tournaments")}
+            </h2>
             <Link
               href="/tournaments"
               className="rounded-sm text-meta font-semibold text-fg-muted transition-colors hover:text-fg"
@@ -386,27 +387,6 @@ export default async function Home() {
         )}
       </main>
 
-      <footer className="border-t border-line py-6">
-        <div className="mds-container flex flex-wrap items-center justify-between gap-3">
-          <span className="font-brand text-body font-bold">
-            Summit
-          </span>
-          <div className="flex items-center gap-4 text-meta font-semibold text-fg-muted">
-            <Link href="/tournaments" className="rounded-sm transition-colors hover:text-fg">
-              {tc("tournaments")}
-            </Link>
-            {signedIn ? (
-              <Link href="/dashboard" className="rounded-sm transition-colors hover:text-fg">
-                {tNav("myDesk")}
-              </Link>
-            ) : (
-              <Link href="/login" className="rounded-sm transition-colors hover:text-fg">
-                {tc("signIn")}
-              </Link>
-            )}
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

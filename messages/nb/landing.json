@@ -1,5 +1,4 @@
 {
-  "eyebrow": "CS2 LAN-turneringer",
   "subtitle": "Kjør hele LAN-et fra påmelding til finale: Steam-påmelding, seedet bracket, live kampkontroll og en OBS-overlay — én flate hele rommet kan følge.",
   "playingNow": "{count, plural, one {# kamp spilles akkurat nå} other {# kamper spilles akkurat nå}}",
   "nothingPlaying": "Ingen kamper spilles akkurat nå.",
@@ -8,7 +7,6 @@
   "floorHeadingLive": "Spilles nå",
   "floorHeadingCalled": "Kalt opp",
   "moreCalled": "{count} til er kalt opp",
-  "listed": "{count, plural, other {# oppført}}",
   "browseAll": "Se alle →",
   "emptyTitle": "Ingen turneringer ennå",
   "emptyAdmin": "Lag den første turneringen i arrangørflaten.",

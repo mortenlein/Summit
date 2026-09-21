@@ -9,7 +9,7 @@ import { getGameMetadata, teamSizeLabel } from "@/lib/games";
 import { clientApi } from "@/lib/client-api";
 import { STAGE_META, STAGE_ORDER, type TournamentStage } from "@/lib/tournament-stage";
 import { STAGE_KEY } from "@/lib/stage-keys";
-import { Badge, EmptyState, PageHeader, TournamentCard } from "@/components/ui";
+import { EmptyState, PageHeader, TournamentCard } from "@/components/ui";
 
 // Same tone map the landing page uses for its stage badges (src/app/page.tsx), so a
 // tournament reads identically on both boards.
@@ -70,8 +70,6 @@ export default function TournamentsOverviewClient() {
     count: searched.filter((row) => String(row.stage || "").toUpperCase() === stage).length,
   })).filter((s) => s.count > 0);
 
-  const liveCount = stageCounts.find((s) => s.stage === "LIVE")?.count ?? 0;
-
   // Board order, not lifecycle order: what is being played outranks what someone might sign up
   // for, which outranks a draft nobody can enter, which outranks a tournament already decided.
   const BOARD_ORDER: TournamentStage[] = ["LIVE", "REGISTRATION", "DRAFT", "COMPLETE"];
@@ -87,18 +85,11 @@ export default function TournamentsOverviewClient() {
 
   return (
     <div className="flex min-h-screen flex-col bg-page text-fg">
+      {/* Title, search, chips. The "OVERSIKT" eyebrow named the page the reader is on, the
+          subtitle described a list they can see, and the red "2 spilles nå" meta line was the
+          same data as the LIVE filter chip below it — except the chip also does something. */}
       <PageHeader
-        eyebrow={t("eyebrow")}
         title={tc("tournaments")}
-        subtitle={t("subtitle")}
-        meta={
-          liveCount > 0 ? (
-            <span className="mds-tabular inline-flex items-center gap-2 text-body font-semibold text-live">
-              <span className="mds-dot is-live" aria-hidden />
-              {t("runningNow", { count: liveCount })}
-            </span>
-          ) : undefined
-        }
         actions={
           hasAny ? (
             <div className="relative w-full sm:w-72">
@@ -126,8 +117,15 @@ export default function TournamentsOverviewClient() {
       <main className="mds-container flex flex-1 flex-col gap-6 py-8">
         {hasAny && (
           <div className="mds-section-head">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="mds-uppercase-label mr-1 text-fg">{t("board")}</h2>
+            {/* No "TAVLA" heading. It was ~90px of a 358px row, read as a fourth chip that does
+                not tap, and in this app's Norwegian *tavla* is the crew board — so it pointed a
+                kid at a screen they cannot open. The group keeps the accessible name the
+                heading was carrying, and is now actually wired to the chips. */}
+            <div
+              className="flex flex-wrap items-center gap-2"
+              role="group"
+              aria-label={t("filterLabel")}
+            >
               <FilterChip label={t("all")} count={searched.length} active={!stageFilter} onClick={() => setParam("stage", "")} />
               {stageCounts.map(({ stage, count }) => (
                 <FilterChip
@@ -140,9 +138,9 @@ export default function TournamentsOverviewClient() {
                 />
               ))}
             </div>
-            <Badge tone="neutral" className="mds-tabular">
-              {isLoading ? "…" : t("listed", { count: filtered.length })}
-            </Badge>
+            {/* No count badge. It equals the active chip's own count in every reachable state,
+                and on a phone the section head wraps, so it took a row of its own and pushed
+                the first tournament's name down. */}
           </div>
         )}
 
@@ -187,14 +185,6 @@ export default function TournamentsOverviewClient() {
         )}
       </main>
 
-      <footer className="border-t border-line py-6">
-        <div className="mds-container flex items-center justify-between">
-          <span className="font-brand text-body font-bold">
-            Apex<span className="text-brand">Play</span>
-          </span>
-          <p className="mds-uppercase-label text-fg-subtle">{t("footer")}</p>
-        </div>
-      </footer>
     </div>
   );
 }

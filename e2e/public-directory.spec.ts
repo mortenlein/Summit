@@ -101,7 +101,10 @@ test('directory filter narrows the list and survives reload through the URL', as
   await page.getByPlaceholder('Filter tournaments…').fill(`Zephyr Open ${stamp}`);
   await expect(page.getByRole('heading', { name: wanted.name, exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: other.name, exact: true })).toHaveCount(0);
-  await expect(page.getByText('1 listed')).toBeVisible();
+  // The count lives on the "All" chip, which is also the control that clears the filter. The
+  // separate "1 listed" badge is gone: it repeated whichever chip was active, and on a phone it
+  // wrapped to a row of its own and pushed the first tournament down.
+  await expect(page.getByRole('button', { name: /^All\s*1$/ })).toBeVisible();
   await expect(page).toHaveURL(/[?&]search=Zephyr/);
 
   // The filter is URL state, so a shared link reproduces the filtered board.
