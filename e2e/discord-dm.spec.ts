@@ -309,6 +309,36 @@ test('going live does not re-DM a match that was already called', async () => {
   expect((await readDmAttempts(match.id)).filter((row) => row.event === 'MATCH_LIVE')).toHaveLength(0);
 });
 
+test('going live retries the kid whose call-up failed, and leaves the one it reached alone', async () => {
+  const { match, leoUserId, samUserId } = await linkedMatch({
+    leo: { discordId: 'dc-retry-leo' },
+    sam: { discordId: 'dc-retry-sam' },
+  });
+  const mia = await apiAs('mia');
+
+  // Discord 500s on Sam's call-up. Leo's goes through. This is the ordinary shape of a flaky
+  // minute at Discord, not an exotic one.
+  simulate({ 'dc-retry-sam': { status: 500 } });
+  expect((await mia.post(`/api/matches/${match.id}/load`)).status()).toBe(200);
+  await expect.poll(async () => (await settled(match.id)).length).toBe(2);
+  const calledRows = await readDmAttempts(match.id);
+  expect(calledRows.find((row) => row.userId === leoUserId)!.outcome).toBe('MOCKED');
+  expect(calledRows.find((row) => row.userId === samUserId)!.outcome).toBe('ERROR');
+
+  simulate({});
+  resetDmLog();
+
+  // Counting call-up rows would have silenced this for both of them. Sam was never reached by
+  // anything, and the live message is his second chance.
+  expect((await mia.post(`/api/matches/${match.id}`, { data: { status: 'LIVE' } })).status()).toBe(200);
+  await expect.poll(async () => (await settled(match.id)).filter((r) => r.event === 'MATCH_LIVE').length).toBe(1);
+  await new Promise((resolve) => setTimeout(resolve, 500));
+
+  const liveRows = (await readDmAttempts(match.id)).filter((row) => row.event === 'MATCH_LIVE');
+  expect(liveRows.map((row) => row.userId)).toEqual([samUserId]);
+  expect(dmLines().map((line) => line.discordId)).toEqual(['dc-retry-sam']);
+});
+
 test('a match that goes live without ever being called does DM its rosters', async () => {
   const { match, leoUserId } = await linkedMatch();
   const mia = await apiAs('mia');

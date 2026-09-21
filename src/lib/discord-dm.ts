@@ -267,6 +267,24 @@ export type DmOutcome =
   | 'ERROR'
   | 'SKIPPED_OPTOUT';
 
+/**
+ * Call-up outcomes that make a MATCH_LIVE DM pointless for that one recipient. Everything NOT in
+ * this set — PENDING, ERROR, RATE_LIMITED — is a kid the call-up never reached, so the live
+ * message is their second chance and must go out.
+ */
+export const CALL_UP_NOT_WORTH_REPEATING: readonly DmOutcome[] = [
+  /** It landed. They walked over thirty seconds ago; a second buzz tells them nothing. */
+  'SENT',
+  /** A configured mock run stood in for a landing. Not reach — but not a retry either. */
+  'MOCKED',
+  /** Discord refuses DMs from this bot to this account; a second try earns the same 50007. */
+  'BLOCKED',
+  /** The account is gone; a second try earns the same 10013. */
+  'UNKNOWN_USER',
+  /** They asked us not to write to them. */
+  'SKIPPED_OPTOUT',
+];
+
 export interface DmRequest {
   userId: string;
   discordId: string;
@@ -609,15 +627,29 @@ export async function sendMatchDms(
     if (!match) return [];
     if (!isDmEnabled(match.tournament)) return [];
 
+    let recipients = await matchDmRecipients(matchId);
+    if (recipients.length === 0) return [];
+
     // §7: a match that already DM'd its call-up does not DM again when it goes live. The kid
     // walked over thirty seconds ago; the channel post carries the rest.
+    //
+    // Per recipient, not per match. Counting rows was the first version and it silenced the live
+    // DM for the whole roster as soon as *any* call-up row existed — including a PENDING row from
+    // a fan-out that died mid-flight, and an ERROR row from a 500 at Discord. The kid those rows
+    // describe was never reached by anything, and the live message was their second chance.
     if (event === 'MATCH_LIVE') {
-      const called = await prisma.discordDmAttempt.count({ where: { matchId, event: 'MATCH_CALLED' } });
-      if (called > 0) return [];
+      const calledRows = await prisma.discordDmAttempt.findMany({
+        where: { matchId, event: 'MATCH_CALLED' },
+        select: { userId: true, outcome: true },
+      });
+      const settled = new Set(
+        calledRows
+          .filter((row) => (CALL_UP_NOT_WORTH_REPEATING as readonly string[]).includes(row.outcome))
+          .map((row) => row.userId)
+      );
+      recipients = recipients.filter((r) => !settled.has(r.userId));
+      if (recipients.length === 0) return [];
     }
-
-    const recipients = await matchDmRecipients(matchId);
-    if (recipients.length === 0) return [];
 
     const results: DmResult[] = [];
 
