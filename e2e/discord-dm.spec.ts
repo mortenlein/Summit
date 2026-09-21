@@ -113,8 +113,8 @@ test('calling a match DMs both rosters once, and a second tap sends nothing more
   const first = await readDmAttempts(match.id);
   expect(first.map((row) => [row.userId, row.event, row.outcome]).sort()).toEqual(
     [
-      [leoUserId, 'MATCH_CALLED', 'SENT'],
-      [samUserId, 'MATCH_CALLED', 'SENT'],
+      [leoUserId, 'MATCH_CALLED', 'MOCKED'],
+      [samUserId, 'MATCH_CALLED', 'MOCKED'],
     ].sort()
   );
   expect(dmLines()).toHaveLength(2);
@@ -136,7 +136,7 @@ test('an opted-out player is recorded as skipped and is never written to', async
   await expect.poll(async () => (await settled(match.id)).length).toBe(2);
 
   const rows = await readDmAttempts(match.id);
-  expect(rows.find((r) => r.userId === leoUserId)!.outcome).toBe('SENT');
+  expect(rows.find((r) => r.userId === leoUserId)!.outcome).toBe('MOCKED');
   // Recorded, not silently dropped: "we chose not to write to this player" and "this player
   // never linked" have different remedies on the organizer's reach panel.
   expect(rows.find((r) => r.userId === samUserId)!.outcome).toBe('SKIPPED_OPTOUT');
@@ -319,7 +319,7 @@ test('a match that goes live without ever being called does DM its rosters', asy
 
   const rows = await readDmAttempts(match.id);
   expect(rows.every((row) => row.event === 'MATCH_LIVE')).toBe(true);
-  expect(rows.find((row) => row.userId === leoUserId)!.outcome).toBe('SENT');
+  expect(rows.find((row) => row.userId === leoUserId)!.outcome).toBe('MOCKED');
   expect(dmLines()[0].content).toContain('kampen din er live nå');
 });
 
@@ -375,4 +375,38 @@ test('up next announces the front of the running order, once per match, never a 
   await new Promise((resolve) => setTimeout(resolve, 500));
   expect(await upNext()).toHaveLength(2);
   expect(await titles()).toContain('Match ready for players');
+});
+
+/**
+ * Regression, and the most important assertion in this file.
+ *
+ * Production ran for months with no DISCORD_BOT_TOKEN at all. The first build of this feature
+ * treated "no token" as "mock" and had the mock return SENT — so every DiscordDmAttempt row
+ * said SENT, DiscordLink.dmState said SENT, the reach panel read 100% reachable with zero DMs
+ * in existence, and the UI told a 13-year-old their message had been sent. The suite asserted
+ * that as correct behaviour.
+ *
+ * SENT must be unreachable without a transport that really talked to Discord.
+ */
+test('a mock transport can never record SENT, however the app is configured', async () => {
+  const { match, leoUserId, samUserId } = await linkedMatch();
+  const mia = await apiAs('mia');
+
+  expect((await mia.post(`/api/matches/${match.id}/load`)).status()).toBe(200);
+  await expect.poll(async () => (await settled(match.id)).length).toBe(2);
+
+  // The mock writes to the log, so these two really did travel the whole production path —
+  // recipient resolution, composition, transport — and still must not be called SENT.
+  expect(dmLines()).toHaveLength(2);
+  const rows = await readDmAttempts(match.id);
+  expect(rows).toHaveLength(2);
+  for (const row of rows) {
+    expect(row.outcome).toBe('MOCKED');
+  }
+
+  // …and neither link may be promoted to SENT, or the reach panel counts a kid as reached.
+  for (const userId of [leoUserId, samUserId]) {
+    const link = await readDiscordLink(userId);
+    expect(link!.dmState).not.toBe('SENT');
+  }
 });

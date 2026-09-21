@@ -34,8 +34,8 @@
   },
   "bot": {
     "linkedReply": "Linked! You're **{name}** on Summit. I've sent you a message — check your DMs.",
-    "linkedReplyBlocked": "Linked! But I can't DM you. Turn on direct messages from server members in your Discord settings, then run `/koble` again.",
-    "linkedReplyUnconfirmed": "Linked! I couldn't confirm the DM got through. You still get the in-app alert, and the crew comes for you.",
+    "linkedReplyBlocked": "Linked! You're **{name}** on Summit. But I can't DM you. Turn on direct messages from server members in your Discord settings, then run `/koble` again.",
+    "linkedReplyUnconfirmed": "Linked! You're **{name}** on Summit. I couldn't confirm the DM got through, but you still get the in-app alert, and the crew comes for you.",
     "unknownCode": "I couldn't find that code, or it expired. Get a new one at turnering.mortenlab.xyz → Profile → Link Discord.",
     "alreadyTaken": "This Discord account is already linked to another Summit user. Tell the crew and they'll sort it out.",
     "noCode": "Type `/koble` and paste the code from turnering.mortenlab.xyz → Profile → Link Discord.",

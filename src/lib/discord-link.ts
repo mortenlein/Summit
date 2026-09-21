@@ -131,7 +131,12 @@ export async function liveLinkCode(userId: string): Promise<IssuedCode | null> {
 // REST client of its own.
 // ---------------------------------------------------------------------------------------
 
-export type DmOutcome = "SENT" | "BLOCKED" | "UNKNOWN_USER" | "RATE_LIMITED" | "ERROR";
+// One vocabulary, defined once in discord-dm.ts. A second copy here is how the two halves of
+// this feature drifted the first time: the sender grew a MOCKED outcome that the linking half
+// could not express, so the linking half kept saying SENT. (No cycle — discord-dm does not
+// import this module.)
+export type { DmOutcome } from "@/lib/discord-dm";
+import type { DmOutcome } from "@/lib/discord-dm";
 
 export interface DmProbeRequest {
   discordId: string;
@@ -162,7 +167,10 @@ export function setDiscordDmProbe(probe: DmProbe | null): DmProbe | null {
 
 /** True while no real token is configured — the `[STRATEGY 3 MOCK]` posture, for DMs. */
 export function isDiscordDmMocked(): boolean {
-  return process.env.NEXT_PUBLIC_STRATEGY_3_MOCK === "true" || !process.env.DISCORD_BOT_TOKEN;
+  // Explicit flag ONLY, matching discord.ts. Inferring "mock" from a missing token meant a
+  // forgotten DISCORD_BOT_TOKEN in the app's .env silently turned every probe into a
+  // fabricated success — the exact failure this module is supposed to make impossible.
+  return process.env.NEXT_PUBLIC_STRATEGY_3_MOCK === "true";
 }
 
 /**
@@ -186,7 +194,9 @@ const mockProbe: DmProbe = async ({ discordId, locale, body }) => {
     return { outcome: "BLOCKED", discordCode: 50007 };
   }
   console.log(`[DISCORD DM MOCK] → ${discordId} (${locale}): ${body}`);
-  return { outcome: "SENT" };
+  // NOT "SENT". Discord was never contacted, so the link stays unconfirmed and the reach panel
+  // keeps counting this player as someone a marshal may still have to walk to.
+  return { outcome: "MOCKED" };
 };
 
 async function runProbe(request: DmProbeRequest): Promise<DmProbeResult> {
@@ -349,8 +359,13 @@ export async function redeemLinkCode(input: {
     data: {
       dmState,
       dmCheckedAt: new Date(),
+      // MOCKED is not a failure — it is "no transport was configured, so nothing was tried".
+      // Writing it here would put a non-error in the column the crew reads when a kid says
+      // the DM never came.
       dmError:
-        probe.outcome === "SENT" ? null : probe.error || String(probe.discordCode ?? probe.outcome),
+        probe.outcome === "SENT" || probe.outcome === "MOCKED"
+          ? null
+          : probe.error || String(probe.discordCode ?? probe.outcome),
       ...(probe.dmChannelId !== undefined ? { dmChannelId: probe.dmChannelId } : {}),
     },
   });
@@ -369,12 +384,16 @@ export async function redeemLinkCode(input: {
     },
   });
 
+  // Every branch names the kid. The one thing this reply exists to answer is "which Summit
+  // player did I just become?", and that answer cannot depend on whether the DM landed —
+  // least of all now, when an unconfigured bot takes the unconfirmed branch every time.
+  const who = escapeDiscordText(name);
   const reply =
     dmState === "SENT"
-      ? t("bot.linkedReply", { name: escapeDiscordText(name) })
+      ? t("bot.linkedReply", { name: who })
       : dmState === "BLOCKED"
-        ? t("bot.linkedReplyBlocked")
-        : t("bot.linkedReplyUnconfirmed");
+        ? t("bot.linkedReplyBlocked", { name: who })
+        : t("bot.linkedReplyUnconfirmed", { name: who });
 
   return { ok: true, reply, name, locale, relinked, dmState };
 }

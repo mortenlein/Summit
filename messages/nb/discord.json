@@ -34,8 +34,8 @@
   },
   "bot": {
     "linkedReply": "Koblet! Du er **{name}** på Summit. Jeg har sendt deg en melding – se i DM-ene dine.",
-    "linkedReplyBlocked": "Koblet! Men jeg får ikke sendt deg DM. Skru på direktemeldinger fra servermedlemmer i Discord-innstillingene, og kjør `/koble` på nytt.",
-    "linkedReplyUnconfirmed": "Koblet! Jeg fikk ikke bekreftet at DM-en kom fram. Du får beskjed i appen uansett, og crewet henter deg.",
+    "linkedReplyBlocked": "Koblet! Du er **{name}** på Summit. Men jeg får ikke sendt deg DM. Skru på direktemeldinger fra servermedlemmer i Discord-innstillingene, og kjør `/koble` på nytt.",
+    "linkedReplyUnconfirmed": "Koblet! Du er **{name}** på Summit. Jeg fikk ikke bekreftet at DM-en kom fram, men du får beskjed i appen uansett, og crewet henter deg.",
     "unknownCode": "Fant ikke koden, eller så har den gått ut. Hent en ny på turnering.mortenlab.xyz → Profil → Koble Discord.",
     "alreadyTaken": "Denne Discord-kontoen er allerede koblet til en annen Summit-bruker. Si fra til crewet, så ordner de det.",
     "noCode": "Skriv `/koble` og lim inn koden du finner på turnering.mortenlab.xyz → Profil → Koble Discord.",

@@ -37,6 +37,12 @@ import { stageLabelKey, totalRoundsOf } from '@/lib/stage-label';
  * path is exercised identically whether or not one exists.
  */
 export interface DmTransport {
+  /**
+   * Whether this transport can actually reach Discord. A mock MUST set false: it is what
+   * makes it structurally impossible to record `SENT` for a message that never left the
+   * process (spec §9 — nothing may claim delivery that Discord did not accept).
+   */
+  readonly real: boolean;
   /** POST /users/@me/channels → the DM channel id for a user. */
   openDmChannel(discordId: string): Promise<string>;
   /** POST /channels/{id}/messages. Plain text, mentions disarmed. */
@@ -102,6 +108,7 @@ function normalizeError(error: any): DiscordDmError {
 /** The real thing. */
 export function restDmTransport(): DmTransport {
   return {
+    real: true,
     async openDmChannel(discordId) {
       try {
         const channel: any = await rest().post(Routes.userChannels(), { body: { recipient_id: discordId } });
@@ -152,6 +159,7 @@ export function mockDmTransport(): DmTransport {
   };
 
   return {
+    real: false,
     async openDmChannel(discordId) {
       const failure = simulated(discordId);
       // 10003 "Unknown Channel" is a stale *cache*, so it belongs to the send, not the open.
@@ -250,6 +258,8 @@ export type DmEvent = 'LINK_PROBE' | 'MATCH_CALLED' | 'MATCH_LIVE';
 
 export type DmOutcome =
   | 'PENDING'
+  /** The send path ran against a mock — Discord was never contacted. Never counts as reach. */
+  | 'MOCKED'
   | 'SENT'
   | 'BLOCKED'
   | 'UNKNOWN_USER'
@@ -360,7 +370,12 @@ export async function sendDirectMessage(
           await prisma.discordLink.updateMany({ where: { userId }, data: { dmChannelId: channelId } }).catch(() => {});
         }
         await transport.sendDm(channelId, discordId, content);
-        return await finish('SENT', undefined, 'SENT');
+        // A mock never contacted Discord, so it may not claim delivery — MOCKED is a separate
+        // outcome precisely so the reach panel, the audit trail and the UI cannot be fooled by
+        // a missing token (spec §9). `dmState` is left untouched for the same reason.
+        return transport.real
+          ? await finish('SENT', undefined, 'SENT')
+          : await finish('MOCKED');
       } catch (raw) {
         const error = raw instanceof DiscordDmError ? raw : normalizeError(raw);
 

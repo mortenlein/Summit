@@ -184,7 +184,7 @@ test('the happy path writes the link, probes the DM, and replies in the player\'
     discordId: LEO_DISCORD,
     discordUsername: 'leo_6614',
     optOut: false,
-    dmState: 'SENT',
+    dmState: 'UNKNOWN',
   });
   expect(link?.dmCheckedAt).not.toBeNull();
 
@@ -196,7 +196,7 @@ test('the happy path writes the link, probes the DM, and replies in the player\'
   expect(attempts).toHaveLength(1);
   expect(attempts[0]).toMatchObject({
     event: 'LINK_PROBE',
-    outcome: 'SENT',
+    outcome: 'MOCKED',
     matchId: null,
     locale: 'nb',
     discordId: LEO_DISCORD,
