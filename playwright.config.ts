@@ -37,6 +37,11 @@ process.env.DISCORD_INVITE_URL = 'https://discord.gg/e2e-6614gamers';
 // One snowflake the mock DM probe refuses with Discord's real 50007, so the BLOCKED path —
 // the one that decides whether a marshal walks to a seat — is assertable without a token.
 process.env.DISCORD_DM_MOCK_BLOCKED = '300000000000000900';
+// The channel-post equivalent of DISCORD_DM_SIMULATE: a spec writes `{"fail": true}` here to
+// make the mock delivery path report a failed post, which is the only way to test that a
+// once-per-match announcement survives a bad minute at Discord instead of spending its one
+// chance on it.
+process.env.DISCORD_ANNOUNCE_SIMULATE = path.resolve(process.cwd(), 'prisma', `e2e-${E2E_PORT}-announce-sim.json`);
 // Web push has to be *configured* for the player-notification specs to mean anything:
 // /api/push/public-key hands back null and sendPushToUsers() returns before touching a
 // subscription when VAPID is unset, so "delivery was attempted" would be unfalsifiable.

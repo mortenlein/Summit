@@ -37,6 +37,12 @@ import { mintSessionToken, personaUserId } from './helpers/auth';
  */
 const DM_LOG = path.resolve(process.cwd(), 'prisma', `e2e-${process.env.E2E_PORT || '4101'}-dm.log`);
 const DM_SIM = path.resolve(process.cwd(), 'prisma', `e2e-${process.env.E2E_PORT || '4101'}-dm-sim.json`);
+/** The channel-post equivalent of DM_SIM: `{ fail: true }` makes every announce report failure. */
+const ANNOUNCE_SIM = path.resolve(
+  process.cwd(),
+  'prisma',
+  `e2e-${process.env.E2E_PORT || '4101'}-announce-sim.json`
+);
 
 interface DmAttemptLine {
   event: string;
@@ -77,15 +83,22 @@ function simulate(rules: Record<string, { status: number; code?: number; retryAf
   fs.writeFileSync(DM_SIM, JSON.stringify(rules));
 }
 
+/** Make the Discord *channel* post fail, or stop making it fail. */
+function simulateAnnounce(fail: boolean) {
+  fs.writeFileSync(ANNOUNCE_SIM, JSON.stringify({ fail }));
+}
+
 test.describe.configure({ mode: 'serial' });
 
 test.beforeEach(() => {
   resetDmLog();
   simulate({});
+  simulateAnnounce(false);
 });
 
 test.afterEach(async () => {
   simulate({});
+  simulateAnnounce(false);
   await disposeApiContexts();
 });
 
@@ -439,4 +452,74 @@ test('a mock transport can never record SENT, however the app is configured', as
     const link = await readDiscordLink(userId);
     expect(link!.dmState).not.toBe('SENT');
   }
+});
+
+/**
+ * Regression: "at most once" must not become "at most zero".
+ *
+ * The up-next post is guarded by its NotificationLog row, and the first version wrote that row
+ * *before* attempting delivery. One bad minute at Discord — a webhook 500, a dropped
+ * connection — and the row was on the record for good, so every later trigger saw a duplicate
+ * and returned early. The channel never got that match's up-next post, and nothing anywhere
+ * said so.
+ *
+ * The row is now a claim that a failed delivery gives back.
+ */
+test('a failed channel post does not spend the one up-next a match gets', async () => {
+  const marcus = await apiAs('marcus');
+  const { tournamentId } = await seedAndGenerate(marcus, { teams: 8, teamSize: 1 });
+  const matches = await readMatches(tournamentId);
+  const roundOne = matches.filter((m) => m.round === 1).sort((a, b) => a.matchOrder - b.matchOrder);
+
+  const upNext = async () => (await readNotifications(tournamentId)).filter((r) => r.title === 'Up next');
+
+  // Discord is having a bad minute when the first result moves the front of the order.
+  simulateAnnounce(true);
+  await complete(marcus, roundOne[0].id, 'HOME');
+  await expect.poll(async () => (await upNext()).length).toBe(1);
+
+  // The staff feed keeps the row — the match really is up next, and the in-app board is the
+  // primary channel. But the post did not go out, and the row says so.
+  const failed = (await upNext())[0];
+  expect(failed.deliveredAt).toBeNull();
+
+  // Discord recovers. Completing a match elsewhere in round one moves nothing at the front, so
+  // the front is still the same match — this is a retry of that post, not a new one.
+  simulateAnnounce(false);
+  await complete(marcus, roundOne[3].id, 'HOME');
+  await expect.poll(async () => (await upNext())[0]?.deliveredAt !== null).toBe(true);
+
+  const rows = await upNext();
+  expect(rows).toHaveLength(1);
+  expect(rows[0].id).toBe(failed.id);
+  expect(rows[0].deliveredAt).not.toBeNull();
+});
+
+/**
+ * The other half of the same guard: two triggers that overlap must not both post.
+ *
+ * `announceUpcomingMatch` is called from three places, and on a busy floor they overlap — a
+ * marshal saving a result while another calls a match. `findFirst` then `create` is not atomic,
+ * so both reads missed and both wrote. `dedupeKey` is unique now, which makes creating the row
+ * the claim.
+ */
+test('two triggers racing for the same up-next post produce one row', async () => {
+  const marcus = await apiAs('marcus');
+  const { tournamentId } = await seedAndGenerate(marcus, { teams: 8, teamSize: 1 });
+  const matches = await readMatches(tournamentId);
+  const roundOne = matches.filter((m) => m.round === 1).sort((a, b) => a.matchOrder - b.matchOrder);
+
+  const upNext = async () => (await readNotifications(tournamentId)).filter((r) => r.title === 'Up next');
+
+  // Two results saved at the same moment. Both move the queue, both trigger the announcement,
+  // and after the first one lands the front of the order is the same match for both.
+  await Promise.all([
+    complete(marcus, roundOne[0].id, 'HOME'),
+    complete(marcus, roundOne[3].id, 'HOME'),
+  ]);
+  await expect.poll(async () => (await upNext()).length).toBeGreaterThan(0);
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+
+  const descriptions = (await upNext()).map((row) => row.description);
+  expect(new Set(descriptions).size).toBe(descriptions.length);
 });

@@ -1,3 +1,4 @@
+import fs from 'fs';
 import { REST } from '@discordjs/rest';
 import { Routes, APIEmbed } from 'discord-api-types/v10';
 import prisma from '@/lib/prisma';
@@ -41,6 +42,26 @@ const COLOR_CALLED = 0x00c853; // green — go to your seat
 const COLOR_LIVE = 0xff1744; // red — being played
 const COLOR_RESULT = 0x0070f3; // blue — the record
 const COLOR_UPNEXT = 0x6b7280; // grey — information, no glyph, no ping
+
+/**
+ * Let a spec make the channel post fail.
+ *
+ * A run with no webhook and no token takes the mock path, where delivery always succeeded — so
+ * the one behaviour that matters most about a once-per-match post (what happens when Discord is
+ * having a bad minute) was the one behaviour no test could reach. Same shape, and the same
+ * reason, as `DISCORD_DM_SIMULATE` in the DM module: read fresh every call, set nowhere but
+ * `playwright.config.ts`.
+ */
+function simulatedAnnounceFailure(): boolean {
+  const file = process.env.DISCORD_ANNOUNCE_SIMULATE;
+  if (!file) return false;
+  try {
+    if (!fs.existsSync(file)) return false;
+    return JSON.parse(fs.readFileSync(file, 'utf8') || '{}')?.fail === true;
+  } catch {
+    return false;
+  }
+}
 
 class DiscordClient {
   private rest: REST | null = null;
@@ -105,15 +126,10 @@ class DiscordClient {
    * also the dedupe key (title + description), so letting it follow a configurable language
    * would quietly change how duplicate calls collapse the day somebody flips `DISCORD_LOCALE`.
    *
-   * `windowMs = null` means "this announcement happens once, ever" — the row itself becomes the
-   * durable guard, with no time bound. That is what `announceMatchUpcoming` needs and it is
-   * why this returns whether it found a duplicate: an up-next post that fires a second time for
-   * the same match teaches the channel to ignore up-next posts.
-   *
-   * Returns `true` when the announcement was already logged. Never throws: a failed log must
-   * not fail the delivery, so an error is reported as "not a duplicate".
+   * Returns the row to deliver for, or `null` when this announcement is already on the record
+   * inside the dedupe window and needs no delivery decision.
    */
-  private async writeLog(embed: TournamentEmbed, type: AnnouncementType, windowMs: number | null = LOG_DEDUPE_WINDOW_MS) {
+  private async writeLog(embed: TournamentEmbed, type: AnnouncementType, windowMs: number = LOG_DEDUPE_WINDOW_MS) {
     const title = String(embed.title || 'Notification');
     const description = String(embed.description || '');
     const tournamentId = embed.tournamentId || null;
@@ -127,24 +143,105 @@ class DiscordClient {
           title,
           description,
           tournamentId,
-          ...(windowMs === null ? {} : { createdAt: { gte: new Date(Date.now() - windowMs) } }),
+          createdAt: { gte: new Date(Date.now() - windowMs) },
         },
         select: { id: true },
       });
-      if (duplicate) return true;
+      if (duplicate) return null;
 
-      await prisma.notificationLog.create({
-        data: {
-          type,
-          title,
-          description,
-          tournamentId,
-        },
+      return await prisma.notificationLog.create({
+        data: { type, title, description, tournamentId, dedupeKey: null },
+        select: { id: true },
       });
-      return false;
     } catch (error) {
       console.warn('[Discord] NotificationLog write failed:', error);
-      return false;
+      return null;
+    }
+  }
+
+  /**
+   * The once-per-thing path: claim the right to deliver this announcement, or find out somebody
+   * else already has it.
+   *
+   * Two things went wrong in the first version, and they are opposite failures of the same
+   * single-step guard:
+   *
+   *  1. **It spent the one chance on a failure.** The row was written, *then* delivery was
+   *     attempted. A webhook 500 left the row on the record, so every later trigger saw a
+   *     duplicate and returned early. "At most once" had quietly become "at most zero", and the
+   *     channel never got its "up next" post for that match again.
+   *  2. **It could fire twice.** `findFirst` then `create` is not atomic, and
+   *     `announceUpcomingMatch` is triggered from three places that overlap on a busy floor —
+   *     a result being saved while another marshal calls a match. Both reads missed, both wrote.
+   *
+   * So: `dedupeKey` is unique, which makes creating the row the atomic claim; and `deliveredAt`
+   * is stamped by a conditional update, which makes *delivering* a second atomic claim. A failed
+   * delivery releases that second claim and leaves the row — the staff feed keeps its record of
+   * a thing that really did happen, and the next trigger retries the post.
+   *
+   * The one window left: a crash between the claim and the send leaves a row stamped delivered
+   * for a post that never went out. That direction is deliberate. A silent miss costs the
+   * channel one grey information post; the other direction spams it, and a channel that spams
+   * is a channel these kids mute.
+   */
+  private async claimOnce(embed: TournamentEmbed, type: AnnouncementType) {
+    const title = String(embed.title || 'Notification');
+    const description = String(embed.description || '');
+    const tournamentId = embed.tournamentId || null;
+    const dedupeKey = `${type}\u0000${tournamentId ?? ''}\u0000${title}\u0000${description}`;
+
+    try {
+      let row = await prisma.notificationLog.findUnique({
+        where: { dedupeKey },
+        select: { id: true, deliveredAt: true },
+      });
+
+      if (!row) {
+        try {
+          row = await prisma.notificationLog.create({
+            data: { type, title, description, tournamentId, dedupeKey },
+            select: { id: true, deliveredAt: true },
+          });
+        } catch (error: any) {
+          if (error?.code !== 'P2002') throw error;
+          // Another trigger created it between our read and our write. Fall through and try to
+          // claim the delivery on their row — whoever loses that race is the one who skips.
+          row = await prisma.notificationLog.findUnique({
+            where: { dedupeKey },
+            select: { id: true, deliveredAt: true },
+          });
+        }
+      }
+
+      if (!row || row.deliveredAt) return null;
+
+      // Compare-and-set. Exactly one caller sees count === 1; everyone else backs off.
+      const claimed = await prisma.notificationLog.updateMany({
+        where: { id: row.id, deliveredAt: null },
+        data: { deliveredAt: new Date() },
+      });
+      return claimed.count === 1 ? { id: row.id } : null;
+    } catch (error) {
+      console.warn('[Discord] once-only claim failed:', error);
+      return null;
+    }
+  }
+
+  /** Delivery failed: give the claim back so the next trigger can try again. */
+  private async releaseClaim(id: string) {
+    try {
+      await prisma.notificationLog.update({ where: { id }, data: { deliveredAt: null } });
+    } catch (error) {
+      console.warn('[Discord] could not release delivery claim:', error);
+    }
+  }
+
+  /** Delivery succeeded on an ordinary (non-once) row: stamp it, so the feed can tell. */
+  private async markDelivered(id: string) {
+    try {
+      await prisma.notificationLog.update({ where: { id }, data: { deliveredAt: new Date() } });
+    } catch (error) {
+      console.warn('[Discord] could not stamp delivery:', error);
     }
   }
 
@@ -163,15 +260,31 @@ class DiscordClient {
     );
 
     // Log first, always — the in-app feeds are the primary channel; Discord is the extra one.
-    const alreadyAnnounced = await this.writeLog(logEmbed, type, options.once ? null : LOG_DEDUPE_WINDOW_MS);
-    // A once-only announcement that is already on the record is not re-posted either. (The
-    // ordinary 10-second dedupe deliberately still delivers: a webhook retry is cheap, a
-    // duplicate row in the marshal feed is not.)
-    if (options.once && alreadyAnnounced) return false;
+    // The once-only path claims its delivery in the same step (see claimOnce); the ordinary path
+    // deliberately still delivers on a dedupe hit, because a webhook retry is cheap and a
+    // duplicate row in the marshal feed is not.
+    const claim = options.once
+      ? await this.claimOnce(logEmbed, type)
+      : await this.writeLog(logEmbed, type);
+    if (options.once && !claim) return false;
+
+    const finish = async (delivered: boolean) => {
+      if (!claim) return delivered;
+      if (delivered) {
+        if (!options.once) await this.markDelivered(claim.id);
+      } else if (options.once) {
+        await this.releaseClaim(claim.id);
+      }
+      return delivered;
+    };
 
     if (isMockMode || !isProdReady) {
+      if (simulatedAnnounceFailure()) {
+        console.log(`[STRATEGY 3 MOCK] ${type} notification simulated as FAILED:`, logEmbed.title);
+        return finish(false);
+      }
       console.log(`[STRATEGY 3 MOCK] ${type} notification intercepted:`, logEmbed.title);
-      return true;
+      return finish(true);
     }
 
     const locale = discordLocale();
@@ -182,7 +295,7 @@ class DiscordClient {
             await getServerTranslations(locale, 'notifications'),
             await getServerTranslations(locale, 'stage')
           );
-    return this.executeRealDelivery(embed);
+    return finish(await this.executeRealDelivery(embed));
   }
 
   async announceMatch(data: {
@@ -196,7 +309,7 @@ class DiscordClient {
     matchUrl: string;
     game: string;
   }) {
-    await this.send((t) => {
+    return this.send((t) => {
       const fields = [
         { name: t('discord.fieldHome'), value: `**${data.homeTeam}**`, inline: true },
         { name: t('discord.fieldStatus'), value: 'vs', inline: true },
@@ -259,7 +372,7 @@ class DiscordClient {
     matchUrl: string;
     game: string;
   }) {
-    await this.send((t, tStage) => {
+    return this.send((t, tStage) => {
       const stage = tStage(data.stageKey, data.stageValues);
       return {
         title: t('discord.liveTitle'),
@@ -338,7 +451,7 @@ class DiscordClient {
     game: string;
   }) {
     const winner = data.homeScore > data.awayScore ? data.homeTeam : data.awayTeam;
-    await this.send(
+    return this.send(
       (t) => ({
         title: t('discord.resultTitle'),
         description: t('discord.resultDescription', {
@@ -380,7 +493,7 @@ class DiscordClient {
     tournamentId?: string;
     url?: string;
   }) {
-    await this.send(
+    return this.send(
       (t) => ({
         title: data.titleKey ? t(`discord.${data.titleKey}`, data.values) : data.title,
         description: data.descriptionKey
@@ -404,7 +517,7 @@ class DiscordClient {
     countryCode?: string | null;
   }) {
     const country = data.countryCode ? data.countryCode.toUpperCase() : 'N/A';
-    await this.send(
+    return this.send(
       (t) => ({
         title: t('discord.signupTitle'),
         description: t('discord.signupDescription', { tournament: data.tournamentName }),

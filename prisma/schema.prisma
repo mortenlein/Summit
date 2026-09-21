@@ -190,6 +190,15 @@ model NotificationLog {
   description String?
   tournamentId String?
   createdAt   DateTime @default(now())
+  /// Set only on announcements that must happen once ever — today, the "up next" post. NULL on
+  /// ordinary rows, and SQLite treats NULLs as distinct in a unique index, so ordinary rows never
+  /// collide with each other. Creating the row IS the claim: a P2002 means another trigger got
+  /// there first. Same pattern, and the same reason, as DiscordDmAttempt's unique key.
+  dedupeKey   String?  @unique
+  /// When the Discord post for this row actually went out. NULL means "logged, not yet
+  /// delivered" — a retryable state. It is deliberately not a boolean: the row is written before
+  /// the send, so "no timestamp" has to be able to mean both "in flight" and "failed, try again".
+  deliveredAt DateTime?
   tournament  Tournament? @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 }
 

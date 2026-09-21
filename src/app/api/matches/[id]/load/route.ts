@@ -99,6 +99,12 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
 
         // A re-call is its own action in the log. Writing `match.loaded` twice would read as two
         // separate calls of the same match, which is exactly what an audit trail must not invent.
+        //
+        // The summary says what the marshal did, not what Discord did. It used to end "both teams
+        // notified", which this route cannot know: the DM fan-out is detached on purpose and the
+        // channel post is best-effort. DiscordDmAttempt and NotificationLog.deliveredAt are the
+        // delivery record; this row is the action record, and the two must not be confused when
+        // somebody is reconstructing why a kid says nobody told them.
         await recordAudit({
             action: recall ? 'match.recalled' : 'match.loaded',
             entityType: 'match',
@@ -106,7 +112,7 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
             tournamentId: updated.tournamentId,
             summary: recall
                 ? `Re-called match ${updated.id.slice(0, 8)} — already called, nothing reset`
-                : `Called match ${updated.id.slice(0, 8)} — both teams notified`,
+                : `Called match ${updated.id.slice(0, 8)}`,
             actor: await buildActorLabel(),
         });
 
