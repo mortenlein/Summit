@@ -5,11 +5,14 @@ import Image from 'next/image';
 import ReactFlow, { Background, Edge, Node, Handle, Position } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useTranslations } from 'next-intl';
-import { isCalled, isDone, isLive } from '@/lib/match-status';
+import { byPlayOrder, isCalled, isDone, isLive } from '@/lib/match-status';
 import { isDoubleElimination, slotLabel, stageName, type Translator } from './tournament/match-labels';
 
 const COL_W = 320;
 const UNIT_Y = 176;
+/** The rendered size of one match node — `w-[260px]` on the card, and its measured height. */
+const NODE_W = 260;
+const NODE_H = 132;
 
 /**
  * One side of a bracket node.
@@ -70,7 +73,7 @@ const PublicMatchNode = ({ data }: any) => {
     return (
         <div
             onClick={() => data.onMatchClick?.(data.id)}
-            className={`mds-card w-[260px] cursor-pointer p-2 ${
+            className={`mds-card w-[260px] cursor-pointer p-2 transition-colors active:border-brand active:bg-field ${
                 live
                     ? 'border-danger'
                     : called
@@ -239,6 +242,20 @@ export default function PublicBracket({ matches, onMatchClick }: { tournamentId:
         return buildLayout(matches, t, tCommon, tStage, onMatchClick);
     }, [matches, t, tCommon, tStage, onMatchClick]);
 
+    /**
+     * Where to open the canvas: the match being played, else the next one that still has to be,
+     * else the last node. Fitting the whole tree is what produced unreadable text — see the
+     * minZoom note below — so the view starts somewhere that answers "what is happening" instead
+     * of at the top-left corner of a bracket nobody can read.
+     */
+    const focusId = useMemo(() => {
+        if (!Array.isArray(matches) || matches.length === 0) return null;
+        const ordered = [...matches].sort(byPlayOrder);
+        const live = ordered.find((m) => isLive(m.status) || isCalled(m.status));
+        const next = ordered.find((m) => !isDone(m.status));
+        return (live || next || ordered[ordered.length - 1])?.id ?? null;
+    }, [matches]);
+
     return (
         <div className="h-full w-full bg-page">
             <ReactFlow
@@ -247,6 +264,20 @@ export default function PublicBracket({ matches, onMatchClick }: { tournamentId:
                 nodeTypes={nodeTypes}
                 fitView
                 fitViewOptions={{ padding: 0.06, maxZoom: 1 }}
+                onInit={(instance) => {
+                    // fitView has already run by now. On a canvas too narrow to hold the whole
+                    // tree at a readable zoom it will have stopped at `minZoom`, leaving the
+                    // bracket overflowing — so re-centre on the match that matters rather than
+                    // leaving the kid at the corner fitView happened to land on.
+                    const node = focusId ? instance.getNode(focusId) : null;
+                    if (!node) return;
+                    const zoom = Math.max(instance.getZoom(), 0.8);
+                    instance.setCenter(
+                        node.position.x + NODE_W / 2,
+                        node.position.y + NODE_H / 2,
+                        { zoom, duration: 0 }
+                    );
+                }}
                 proOptions={{ hideAttribution: true }}
                 nodesDraggable={false}
                 nodesConnectable={false}
@@ -254,7 +285,12 @@ export default function PublicBracket({ matches, onMatchClick }: { tournamentId:
                 panOnScroll={false}
                 panOnDrag={true}
                 selectionOnDrag={false}
-                minZoom={0.4}
+                // 0.4 was the single worst number in the app. An 8-team bracket in a 358px card
+                // clamped to exactly that, which is where the ~182px empty band, the 2px overflow
+                // clipping the FINALE card, and team names rendering at ~4.8 CSS px all came
+                // from — one clamp, three symptoms. 0.8 keeps a name legible; the tree overflows
+                // instead, and overflow is something a thumb can solve.
+                minZoom={0.8}
                 maxZoom={1.5}
             >
                 <Background color="var(--mds-border)" gap={40} size={1} />

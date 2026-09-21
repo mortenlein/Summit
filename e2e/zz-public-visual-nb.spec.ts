@@ -85,7 +85,9 @@ test('capture the Norwegian spectator tabs', async ({ browser }) => {
     // The detail modals carry the longest Norwegian compounds ("Lagoppstilling").
     await page.goto(`/tournaments/${t.id}?tab=teams`);
     await page.waitForTimeout(800);
-    await page.getByRole('button', { name: /Detaljer/ }).first().click();
+    // The team card is the button now — its name is the team's. The repeated
+    // "Detaljer →" bar under every card was ~52px x 8 teams of scroll.
+    await page.locator('div.mds-card').first().getByRole('button').first().click();
     await shoot(page, '06-lagmodal', key);
 
     await ctx.close();
