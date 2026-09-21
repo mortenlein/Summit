@@ -9,11 +9,16 @@ import { ArrowRight, Gamepad2, Loader2, LogOut, ShieldCheck, Zap } from 'lucide-
 import { Badge, Button, Card, EmptyState } from '@/components/ui';
 import { MockPersonaButtons } from '@/components/MockPersonaButtons';
 import { SeatEditor } from '@/components/player/SeatEditor';
+import { DiscordLinkCard } from '@/components/player/DiscordLinkCard';
 
 /**
  * /profile — the account, and the one thing a player actually changes on it: their seat in each
  * tournament they're registered for. Anything this page cannot back with data (a settings screen
- * that doesn't exist, a second "linked account" nobody links) is deliberately not here.
+ * that doesn't exist) is deliberately not here.
+ *
+ * The Discord card is the one exception to the old "no second linked account" rule, and only
+ * because it is now backed by a table and by delivery: it is where these players already are.
+ * It self-hides when the integration is unconfigured, so it is never a dead offer.
  */
 export default function ProfilePage() {
     const t = useTranslations('player');
@@ -122,6 +127,11 @@ export default function ProfilePage() {
                         </Button>
                     </div>
                 </header>
+
+                {/* The one linked account that is now backed by a table. The header comment
+                    above is still right about inventing surfaces — this one exists because a
+                    DM to Discord is how a player at their PC finds out they have been called. */}
+                <DiscordLinkCard />
 
                 <section className="space-y-3">
                     <p className="mds-uppercase-label text-fg-subtle">{t('tournaments.label')}</p>

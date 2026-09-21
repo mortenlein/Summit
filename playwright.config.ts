@@ -26,6 +26,17 @@ process.env.STEAM_API_KEY = 'e2e-placeholder';
 process.env.E2E_LOCALE = 'en';
 // Inbound CS2 webhook bearer key — explicit so tests never depend on (or leak) the real .env.
 process.env.CS2_WEBHOOK_KEY = 'e2e-cs2-webhook-key';
+// Discord account linking has to be *configured* for its specs to mean anything: the card and
+// the bot callbacks self-hide (null / 503) when these are unset, exactly like push with no
+// VAPID keys, so every assertion would otherwise pass for the wrong reason. Test-only values —
+// no real guild, no real invite, and deliberately NOT the CS2 key (that one goes to a game
+// server). No DISCORD_BOT_TOKEN: the DM probe stays on its mock path, which is the point.
+process.env.SUMMIT_BOT_KEY = 'e2e-summit-bot-key';
+process.env.DISCORD_GUILD_ID = '000000000000000001';
+process.env.DISCORD_INVITE_URL = 'https://discord.gg/e2e-6614gamers';
+// One snowflake the mock DM probe refuses with Discord's real 50007, so the BLOCKED path —
+// the one that decides whether a marshal walks to a seat — is assertable without a token.
+process.env.DISCORD_DM_MOCK_BLOCKED = '300000000000000900';
 // Web push has to be *configured* for the player-notification specs to mean anything:
 // /api/push/public-key hands back null and sendPushToUsers() returns before touching a
 // subscription when VAPID is unset, so "delivery was attempted" would be unfalsifiable.

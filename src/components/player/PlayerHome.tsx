@@ -8,6 +8,7 @@ import { isCalled, isLive } from '@/lib/match-status';
 import { Button, Card, Badge } from '@/components/ui';
 import { MyQueue, useMyQueue, type QueueEntry } from '@/components/player/MyQueue';
 import { EnableAlertsButton } from '@/components/player/EnableAlertsButton';
+import { DiscordLinkCard } from '@/components/player/DiscordLinkCard';
 import { SeatEditor } from '@/components/player/SeatEditor';
 
 /**
@@ -100,6 +101,11 @@ export function PlayerHome({
         />
 
         <TournamentList registrations={registrations} loading={loading} onSeatSaved={refreshProfile} />
+
+        {/* Discord is where these players already are, so the desk carries the prompt — but
+            only until it is taken: `variant="desk"` disappears the moment the account is
+            linked, and it never appears at all when the integration is unconfigured. */}
+        <DiscordLinkCard variant="desk" />
       </main>
     </div>
   );

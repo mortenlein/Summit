@@ -26,6 +26,9 @@ export const NAMESPACES = [
   // Copy composed on the server with no request behind it: push notifications (written in the
   // recipient's stored language) and Discord posts (one configured language). See src/i18n/server.ts.
   'notifications',
+  // Discord: the /koble link card (a request behind it) plus the strings the app composes for
+  // the bot to print and for a DM — written in the recipient's own language, never the bot's.
+  'discord',
 ] as const;
 
 export async function loadMessages(locale: Locale) {
