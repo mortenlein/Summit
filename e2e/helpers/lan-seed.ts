@@ -624,3 +624,70 @@ export async function readTeam(teamId: string) {
     include: { players: { orderBy: { name: 'asc' } } },
   });
 }
+
+// ---------------------------------------------------------------------------
+// Discord-reach fixtures (organizer reach panel).
+//
+// The panel's whole point is that a `DiscordLink` is an address and a `DiscordDmAttempt` is
+// evidence, so the fixtures have to be able to produce those two independently: a player who is
+// linked but never proven, and a player Discord refused, are different states with different
+// remedies and must be seedable apart from one another.
+// ---------------------------------------------------------------------------
+
+let discordCounter = 0;
+
+/** A bare `User` row — the thing a `Player.userId` and a `DiscordLink` both hang off. */
+export async function createUserRow(name: string) {
+  discordCounter += 1;
+  const suffix = `${Date.now().toString(36)}-${discordCounter}`;
+  return prisma.user.create({
+    data: { name, email: `mock+reach-${suffix}@summit.local`, steamId: nextSteamId() },
+  });
+}
+
+export interface DiscordLinkOptions {
+  /** The snowflake. Tests assert this string never reaches any payload. */
+  discordId?: string;
+  discordUsername?: string;
+  /** UNKNOWN | SENT | BLOCKED — the cached state, deliberately settable without an attempt. */
+  dmState?: string;
+  optOut?: boolean;
+}
+
+/** Link a user to Discord. Returns the row, whose `discordId` is the leak canary. */
+export async function linkDiscord(userId: string, options: DiscordLinkOptions = {}) {
+  discordCounter += 1;
+  return prisma.discordLink.create({
+    data: {
+      userId,
+      discordId: options.discordId ?? `9911${Date.now()}${discordCounter}`,
+      discordUsername: options.discordUsername ?? `player_${discordCounter}`,
+      dmState: options.dmState ?? 'UNKNOWN',
+      optOut: options.optOut ?? false,
+    },
+  });
+}
+
+export interface DmAttemptOptions {
+  event?: string;
+  matchId?: string | null;
+  /** SENT | BLOCKED | UNKNOWN_USER | RATE_LIMITED | ERROR | SKIPPED_OPTOUT */
+  outcome: string;
+  discordCode?: number | null;
+  locale?: string;
+}
+
+/** One row of proof (or of refusal) that Discord answered about this user. */
+export async function recordDmAttempt(userId: string, discordId: string, options: DmAttemptOptions) {
+  return prisma.discordDmAttempt.create({
+    data: {
+      userId,
+      discordId,
+      event: options.event ?? 'LINK_PROBE',
+      matchId: options.matchId ?? null,
+      outcome: options.outcome,
+      discordCode: options.discordCode ?? null,
+      locale: options.locale ?? 'nb',
+    },
+  });
+}

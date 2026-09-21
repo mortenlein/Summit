@@ -8,6 +8,7 @@ import { Card, Badge, StatusBadge } from '@/components/ui';
 import { byPlayOrder, isActive, isDone } from '@/lib/match-status';
 import type { Translator } from '@/components/tournament/match-labels';
 import { EonBridgePanel } from './EonBridgePanel';
+import { DiscordReachPanel } from './DiscordReachPanel';
 
 interface ManageControlProps {
   tournament: any;
@@ -372,6 +373,10 @@ export function ManageControl({ tournament, teams, matches, onOpenMatchModal }: 
               )}
             </div>
           </Card>
+
+          {/* Who can actually be told, before the first match is called — and the kill switch
+              for DMs, which is why it sits on the cockpit rather than behind Settings. */}
+          <DiscordReachPanel tournamentId={tournament.id} />
 
           <EonBridgePanel tournamentId={tournament.id} />
         </section>
