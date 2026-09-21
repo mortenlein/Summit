@@ -624,3 +624,54 @@ export async function readTeam(teamId: string) {
     include: { players: { orderBy: { name: 'asc' } } },
   });
 }
+
+// --- Discord fixtures (e2e/discord-dm.spec.ts) ------------------------------------------------
+// A DM only ever goes to a `User` that has redeemed a link code, so every Discord assertion
+// starts by planting that row. There is no bot token in a test run: `src/lib/discord-dm.ts`
+// takes its mock transport, writes the same attempt rows, and appends what it *would* have sent
+// to DISCORD_DM_LOG.
+
+export interface DiscordLinkOptions {
+  discordId?: string;
+  discordUsername?: string;
+  optOut?: boolean;
+  dmState?: 'UNKNOWN' | 'SENT' | 'BLOCKED';
+  dmChannelId?: string | null;
+}
+
+/** Bind a Discord account to a Summit user, replacing any link either side already had. */
+export async function linkDiscord(userId: string, options: DiscordLinkOptions = {}) {
+  const discordId = options.discordId ?? `dc-${Math.random().toString(36).slice(2, 10)}`;
+  await prisma.discordLink.deleteMany({ where: { userId } });
+  await prisma.discordLink.deleteMany({ where: { discordId } });
+  return prisma.discordLink.create({
+    data: {
+      userId,
+      discordId,
+      discordUsername: options.discordUsername ?? `player_${discordId}`,
+      optOut: options.optOut ?? false,
+      dmState: options.dmState ?? 'UNKNOWN',
+      dmChannelId: options.dmChannelId ?? null,
+    },
+  });
+}
+
+/** Forget a user's Discord account, and every attempt row belonging to them. */
+export async function clearDiscordLink(userId: string) {
+  await prisma.discordDmAttempt.deleteMany({ where: { userId } });
+  await prisma.discordLink.deleteMany({ where: { userId } });
+}
+
+export async function readDiscordLink(userId: string) {
+  return prisma.discordLink.findUnique({ where: { userId } });
+}
+
+/** Every DM attempt written for a match, oldest first — the record nothing may claim without. */
+export async function readDmAttempts(matchId: string) {
+  return prisma.discordDmAttempt.findMany({ where: { matchId }, orderBy: { createdAt: 'asc' } });
+}
+
+/** The organizer's Pause Discord switch. */
+export async function setDiscordDmPaused(tournamentId: string, discordDmPaused: boolean) {
+  return prisma.tournament.update({ where: { id: tournamentId }, data: { discordDmPaused } });
+}

@@ -9,9 +9,24 @@
       "body": "{home} vs {away} — get to your station."
     }
   },
+  "dm": {
+    "called": {
+      "lead": "{hasSeat, select, no {You're up — head to your seat now.} other {Seat {seat} — go there now. You're up.}}"
+    },
+    "live": {
+      "lead": "{hasSeat, select, no {Your match is live — get to your seat.} other {Seat {seat} — your match is live.}}"
+    },
+    "body": "{home} vs {away} · {stage} · {tournament}",
+    "link": "Open Summit: {url}",
+    "tail": "The crew will come find you if you're not at your seat."
+  },
   "discord": {
     "matchTitle": "Match ready for players",
     "matchDescription": "**{home}** vs **{away}** · {tournament} · Round {round}",
+    "liveTitle": "Match is live",
+    "liveDescription": "**{home}** vs **{away}** · {tournament} · {stage} — being played now.",
+    "upnextTitle": "Up next",
+    "upnextDescription": "**{home}** vs **{away}** · {tournament} · {stage}",
     "resultTitle": "Result posted",
     "resultDescription": "**{home}** {homeScore}:{awayScore} **{away}** · {tournament} · Official result",
     "signupTitle": "Player registered",
@@ -30,6 +45,7 @@
     "fieldTeam": "Team",
     "fieldCountry": "Country",
     "footerLive": "Summit live operations",
+    "footerUpnext": "Summit running order",
     "footerSignup": "Summit signup update",
     "footer": "Summit"
   }

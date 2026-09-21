@@ -39,6 +39,20 @@ process.env.VAPID_SUBJECT = 'mailto:e2e@summit.local';
 // everywhere else, including production) — that is how player-push.spec.ts can see that two
 // players on one match were written to in two different languages.
 process.env.PUSH_DELIVERY_LOG = path.resolve(process.cwd(), 'prisma', `e2e-${E2E_PORT}-push.log`);
+// Discord DMs. There is no bot token in a test run (and none on the box yet), so
+// `src/lib/discord-dm.ts` takes its mock transport — but the fan-out itself, the attempt rows
+// and the per-locale composition are the real code path, and DISCORD_DM_ENABLED has to be on or
+// the whole thing returns before touching a recipient and every assertion passes for the wrong
+// reason. Same posture as VAPID above.
+process.env.DISCORD_DM_ENABLED = 'true';
+// One JSON line per DM attempt — what would have been sent, and what Discord answered. This is
+// the only way a spec can read a message body that, in production, exists nowhere but a kid's
+// phone. Mirrors PUSH_DELIVERY_LOG; unset everywhere else, including production.
+process.env.DISCORD_DM_LOG = path.resolve(process.cwd(), 'prisma', `e2e-${E2E_PORT}-dm.log`);
+// Lets a spec make Discord fail in a named way (50007 "DMs closed", 429, …). The error table is
+// the half of the DM sender most likely to be wrong and is otherwise unreachable without a real
+// token and a real kid with DMs switched off. Read fresh on every send; unset in production.
+process.env.DISCORD_DM_SIMULATE = path.resolve(process.cwd(), 'prisma', `e2e-${E2E_PORT}-dm-sim.json`);
 
 export default defineConfig({
   testDir: './e2e',

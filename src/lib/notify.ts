@@ -1,7 +1,10 @@
 import prisma from "@/lib/prisma";
 import { groupUsersByLocale, isPushConfigured, sendPushBatches, type PushBatch } from "@/lib/push";
-import { announceMatch } from "@/lib/discord";
+import { announceMatch, announceMatchLive, announceMatchUpcoming } from "@/lib/discord";
+import { sendMatchDms } from "@/lib/discord-dm";
 import { getServerTranslations } from "@/i18n/server";
+import { byPlayOrder, isActive, isDone } from "@/lib/match-status";
+import { stageLabelKey, totalRoundsOf } from "@/lib/stage-label";
 
 /** What a match-ready push needs to say who is playing whom, and where to send the tap. */
 export interface MatchReadyCopy {
@@ -85,19 +88,115 @@ export async function notifyMatchReady(matchId: string, status: string) {
       await sendPushBatches(batches);
     }
 
-    // The in-app NotificationLog row is written by announceMatch() (discord.ts logs on both the
-    // real and mock delivery paths), so nothing is logged here — that would double the feed.
+    // The in-app NotificationLog row is written by the announce path (discord.ts logs on both
+    // the real and mock delivery paths), so nothing is logged here — that would double the feed.
+    const matchUrl = `${process.env.NEXTAUTH_URL}/tournaments/${match.tournamentId}`;
 
-    await announceMatch({
-      homeTeam: match.homeTeam.name,
-      awayTeam: match.awayTeam.name,
-      round: match.round,
-      tournamentName: match.tournament.name,
-      tournamentId: match.tournamentId,
-      matchUrl: `${process.env.NEXTAUTH_URL}/tournaments/${match.tournamentId}`,
-      game: match.tournament.game,
-    }).catch(() => {});
+    if (status === "LIVE") {
+      const stage = stageLabelKey(match, await totalRoundsFor(match.tournamentId));
+      await announceMatchLive({
+        homeTeam: match.homeTeam.name,
+        awayTeam: match.awayTeam.name,
+        stageKey: stage.key,
+        stageValues: stage.values,
+        tournamentName: match.tournament.name,
+        tournamentId: match.tournamentId,
+        matchUrl,
+        game: match.tournament.game,
+      }).catch(() => {});
+    } else {
+      await announceMatch({
+        homeTeam: match.homeTeam.name,
+        awayTeam: match.awayTeam.name,
+        round: match.round,
+        tournamentName: match.tournament.name,
+        tournamentId: match.tournamentId,
+        matchUrl,
+        game: match.tournament.game,
+      }).catch(() => {});
+    }
+
+    // Discord DMs to the two rosters — detached on purpose. This is the marshal's tap: the
+    // route must return the moment the database write and the broadcast are done, not after ten
+    // paced sends or a 429 with a multi-second retry_after, or they tap "Kall opp" again in a
+    // loud room. Idempotency is durable (DiscordDmAttempt), so the second tap costs nothing.
+    void sendMatchDms(match.id, status === "LIVE" ? "MATCH_LIVE" : "MATCH_CALLED").catch(() => {});
+
+    // Calling a match moves the front of the running order, so whatever is now first in play
+    // order becomes "up next". Detached for the same reason.
+    void announceUpcomingMatch(match.tournamentId).catch(() => {});
   } catch (err) {
     console.warn("[Notify] notifyMatchReady failed:", err);
+  }
+}
+
+/** Highest winners-bracket round in a tournament — the anchor stage names count back from. */
+async function totalRoundsFor(tournamentId: string): Promise<number> {
+  const draw = await prisma.match.findMany({
+    where: { tournamentId },
+    select: { bracketType: true, round: true },
+  });
+  return totalRoundsOf(draw);
+}
+
+/**
+ * Announce the match that is now at the front of the running order — owner ask #1.
+ *
+ * **What "upcoming" means here, precisely:** the single match that (a) has *both* teams known,
+ * (b) is not finished and not already called or live, and (c) sorts first under `byPlayOrder`
+ * from `match-status.ts` — the same comparator the player queue, the marshal board and the
+ * cockpit order by. One match, not a round, because Summit runs rounds in parallel and "the
+ * whole next round is up next" is both true and useless.
+ *
+ * Why those three conditions and not "a match just acquired its second team":
+ *  - **Both teams known** excludes TBD slots. A post naming "Team Fjord vs TBD" tells nobody
+ *    anything and cannot be deduplicated sensibly when the other half arrives.
+ *  - **Not already called/live** is what stops the up-next post racing the call-up post for the
+ *    same match; a called match is not upcoming, it is happening.
+ *  - **First in play order** is the correction to the naive trigger. With parallel rounds, a
+ *    round-2 match can acquire both teams while two round-1 matches are still unplayed — it is
+ *    not next, and announcing it there teaches the channel that "up next" is a lie.
+ *
+ * Fires at most once per match: `announceMatchUpcoming` guards on the NotificationLog row.
+ * Cheap to call after any event that moves the queue (a call, a result, an advancement).
+ */
+export async function announceUpcomingMatch(tournamentId: string) {
+  try {
+    const matches = await prisma.match.findMany({
+      where: { tournamentId },
+      select: {
+        id: true,
+        round: true,
+        matchOrder: true,
+        bracketType: true,
+        status: true,
+        homeTeam: { select: { name: true } },
+        awayTeam: { select: { name: true } },
+      },
+    });
+
+    const next = matches
+      .filter((m) => m.homeTeam && m.awayTeam && !isDone(m.status) && !isActive(m.status))
+      .sort(byPlayOrder)[0];
+    if (!next) return;
+
+    const stage = stageLabelKey(next, totalRoundsOf(matches));
+    const tournament = await prisma.tournament.findUnique({
+      where: { id: tournamentId },
+      select: { name: true },
+    });
+    if (!tournament) return;
+
+    await announceMatchUpcoming({
+      homeTeam: next.homeTeam!.name,
+      awayTeam: next.awayTeam!.name,
+      stageKey: stage.key,
+      stageValues: stage.values,
+      tournamentName: tournament.name,
+      tournamentId,
+      matchUrl: `${process.env.NEXTAUTH_URL}/tournaments/${tournamentId}`,
+    });
+  } catch (err) {
+    console.warn("[Notify] announceUpcomingMatch failed:", err);
   }
 }

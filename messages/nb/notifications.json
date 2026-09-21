@@ -9,9 +9,24 @@
       "body": "{home} vs {away} — kom deg til plassen din."
     }
   },
+  "dm": {
+    "called": {
+      "lead": "{hasSeat, select, no {Det er din tur — gå til plassen din nå.} other {Plass {seat} — gå dit nå. Det er din tur.}}"
+    },
+    "live": {
+      "lead": "{hasSeat, select, no {Kampen din er live nå — kom deg til plassen din.} other {Plass {seat} — kampen din er live nå.}}"
+    },
+    "body": "{home} vs {away} · {stage} · {tournament}",
+    "link": "Åpne Summit: {url}",
+    "tail": "Crewet kommer og henter deg hvis du ikke er på plass."
+  },
   "discord": {
     "matchTitle": "Kampen er klar for spillerne",
     "matchDescription": "**{home}** vs **{away}** · {tournament} · Runde {round}",
+    "liveTitle": "Kampen er live",
+    "liveDescription": "**{home}** vs **{away}** · {tournament} · {stage} — spilles nå.",
+    "upnextTitle": "Neste ut",
+    "upnextDescription": "**{home}** vs **{away}** · {tournament} · {stage}",
     "resultTitle": "Resultat lagt ut",
     "resultDescription": "**{home}** {homeScore}:{awayScore} **{away}** · {tournament} · Offisielt resultat",
     "signupTitle": "Spiller påmeldt",
@@ -30,6 +45,7 @@
     "fieldTeam": "Lag",
     "fieldCountry": "Land",
     "footerLive": "Summit liveoppdatering",
+    "footerUpnext": "Summit kampoppsett",
     "footerSignup": "Summit påmelding",
     "footer": "Summit"
   }

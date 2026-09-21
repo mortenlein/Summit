@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { announceResult, announceMatch } from '@/lib/discord';
+import { announceResult } from '@/lib/discord';
 import { requireStaffApi } from '@/lib/route-auth';
 import { eventBus } from '@/lib/eventBus';
 import { buildActorLabel, recordAudit } from '@/lib/audit';
-import { notifyMatchReady } from '@/lib/notify';
+import { announceUpcomingMatch, notifyMatchReady } from '@/lib/notify';
 import { codeForText } from '@/lib/api-errors';
 import { conflictResponse, errorResponse, hasTimestampConflict, normalizeExpectedUpdatedAt } from '@/lib/mutation-guards';
 import { isDone } from '@/lib/match-status';
@@ -169,18 +169,12 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
                 include: { homeTeam: true, awayTeam: true, tournament: true }
             });
 
-            // If match now has both teams, announce it
-            if (nextMatch.homeTeam && nextMatch.awayTeam) {
-                await announceMatch({
-                    homeTeam: nextMatch.homeTeam.name,
-                    awayTeam: nextMatch.awayTeam.name,
-                    round: nextMatch.round,
-                    tournamentName: nextMatch.tournament.name,
-                    tournamentId: nextMatch.tournamentId,
-                    matchUrl: `${process.env.NEXTAUTH_URL}/tournaments/${nextMatch.tournamentId}`,
-                    game: nextMatch.tournament.game
-                });
-            }
+            // A downstream match acquiring its second team used to post `announceMatch` here —
+            // i.e. "Match ready for players", the green call-up, for a match nobody has called.
+            // That is what taught the channel to ignore call-ups. The honest version of this
+            // moment is the grey "up next" post, and it is decided once per tournament event by
+            // `announceUpcomingMatch` below, which also knows whether this match is actually
+            // next in play order (with parallel rounds, it often is not).
 
             const payload = {
                 matchId: nextMatch.id,
@@ -194,6 +188,14 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
 
         for (const step of plan.advance) {
             await handleAdvance(step.matchId, step.teamId, step.slot === 'HOME');
+        }
+
+        // A finished match moves the front of the running order, and the winner it just advanced
+        // may have handed the next match its second team. Either way, what is "up next" has
+        // changed — `announceUpcomingMatch` decides whether that is worth a post (owner ask #1)
+        // and guarantees it happens at most once per match.
+        if (isDone(plan.status) && !isDone(match.status)) {
+            await announceUpcomingMatch(updatedMatch.tournamentId);
         }
 
         // A finished match releases its players: clear their at-seat stamps so the next call
