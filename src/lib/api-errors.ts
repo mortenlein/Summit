@@ -53,6 +53,8 @@ export const API_ERROR_TEXT = {
   /** Carries `params.matchRef` — the short match id the organizer has to reset first. */
   downstream_started: 'Downstream match {matchRef} has already started — reset it first.',
   both_teams_required: 'Both teams must be assigned before loading a match',
+  match_already_live: 'This match is already being played — it cannot be called again',
+  match_already_complete: 'This match is already finished — it cannot be called again',
 } as const;
 
 export type ApiErrorCode = keyof typeof API_ERROR_TEXT;

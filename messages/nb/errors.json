@@ -24,5 +24,7 @@
   "forfeit_side_invalid": "forfeit må være HOME eller AWAY",
   "best_of_too_low": "bestOf må være minst 1",
   "downstream_started": "Kamp {matchRef} lenger ute i bracketen har allerede startet — nullstill den først.",
-  "both_teams_required": "Begge lag må være satt opp før kampen kan kalles opp"
+  "both_teams_required": "Begge lag må være satt opp før kampen kan kalles opp",
+  "match_already_live": "Kampen spilles allerede. Den kan ikke kalles opp på nytt.",
+  "match_already_complete": "Kampen er ferdigspilt. Den kan ikke kalles opp på nytt."
 }
