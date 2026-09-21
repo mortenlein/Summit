@@ -6,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ArrowRight } from 'lucide-react';
 import { isCalled, isLive } from '@/lib/match-status';
 import { Button, Card, Badge } from '@/components/ui';
-import { MyQueue, useMyQueue, type QueueEntry } from '@/components/player/MyQueue';
+import { MyQueue, hasCallCard, useMyQueue, type QueueEntry } from '@/components/player/MyQueue';
 import { EnableAlertsButton } from '@/components/player/EnableAlertsButton';
 import { SeatEditor } from '@/components/player/SeatEditor';
 
@@ -80,11 +80,13 @@ export function PlayerHome({
 
   return (
     <div className="min-h-screen bg-page text-fg">
-      <main className="mds-container space-y-6 py-6 sm:py-8">
+      {/* "SPILLERDESK" is an aria-label, not a line of type. A kid who opened this page knows
+          which page they opened; the first thing they should read is their own name, and then
+          the green card telling them where to go. */}
+      <main className="mds-container space-y-6 py-6 sm:py-8" aria-label={t('desk.label')}>
         <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
           <div>
-            <p className="mds-uppercase-label text-fg-subtle">{t('desk.label')}</p>
-            {user?.name && <h1 className="mds-name-lg mt-0.5 text-2xl">{user.name}</h1>}
+            {user?.name && <h1 className="mds-name-lg text-2xl">{user.name}</h1>}
           </div>
           <EnableAlertsButton />
         </header>
@@ -99,7 +101,12 @@ export function PlayerHome({
           onSeatSaved={refreshProfile}
         />
 
-        <TournamentList registrations={registrations} loading={loading} onSeatSaved={refreshProfile} />
+        <TournamentList
+          registrations={registrations}
+          loading={loading}
+          fallback={fallback}
+          onSeatSaved={refreshProfile}
+        />
 
         {/* No Discord card here, deliberately. Spec §6: "Player desk: nothing. No card, no
             badge, no nag, ever" — and `docs/kid-clutter-plan.md` is actively stripping this
@@ -129,21 +136,30 @@ function StateChip({ entry }: { entry?: QueueEntry }) {
 function TournamentList({
   registrations,
   loading,
+  fallback,
   onSeatSaved,
 }: {
   registrations: any[];
   loading: boolean;
+  /** The same server-rendered entries the queue gets, so both halves agree on the first frame. */
+  fallback: QueueEntry[];
   onSeatSaved: () => void;
 }) {
   const t = useTranslations('player');
   const tCommon = useTranslations('common');
   const { data } = useMyQueue({ enabled: !loading });
-  const byTournament = new Map((data?.queue ?? []).map((e) => [e.tournamentId, e]));
+  const queue = data?.queue ?? fallback;
+  const byTournament = new Map(queue.map((e) => [e.tournamentId, e]));
+
+  // A tournament with a call card above is already fully answered: the seat, the opponent and
+  // the server are all on that card. Repeating it here put a second B01 and a second pencil
+  // under the kid's thumb, and the second one is the wrong one to press.
+  const called = new Set(queue.filter(hasCallCard).map((e) => e.tournamentId));
+  const rows = registrations.filter((reg: any) => !called.has(reg.team.tournament.id));
 
   if (loading && registrations.length === 0) {
     return (
-      <section className="space-y-3" aria-busy="true">
-        <p className="mds-uppercase-label text-fg-subtle">{t('tournaments.label')}</p>
+      <section className="space-y-3" aria-busy="true" aria-label={t('tournaments.label')}>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           <Card className="space-y-3">
             <div className="h-3 w-1/4 animate-pulse rounded-sm bg-white/5" />
@@ -155,8 +171,10 @@ function TournamentList({
     );
   }
 
-  // No registrations: the desk already shows one zero state above. Two is noise.
-  if (registrations.length === 0) return null;
+  // No registrations: the desk already shows one zero state above. Two is noise. And when every
+  // registration is already answered by a call card, this whole section goes — header, link and
+  // divider included. A heading over nothing is still something to read.
+  if (rows.length === 0) return null;
 
   return (
     <section className="space-y-3">
@@ -167,7 +185,7 @@ function TournamentList({
         </Link>
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {registrations.map((reg: any) => (
+        {rows.map((reg: any) => (
           // The card is not one big link: the seat editor is interactive, and a button inside
           // an anchor is both invalid markup and a click trap.
           <Card key={reg.id} className="flex h-full flex-col justify-between gap-4">

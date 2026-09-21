@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { Radio, Flag, Hourglass, AlertTriangle, RefreshCw, Zap, ArrowRight, Trophy, Clock } from 'lucide-react';
+import { Radio, Hourglass, AlertTriangle, RefreshCw, Zap, ArrowRight, Trophy, Clock } from 'lucide-react';
 import { Button, Card, StatusBadge, EmptyState } from '@/components/ui';
 import { isCalled, isLive } from '@/lib/match-status';
 import { buildSteamConnectUrl } from '@/lib/match-links';
@@ -82,10 +82,18 @@ function Headline({ entry, tone }: { entry: QueueEntry; tone: Tone }) {
   return <>{t('headline.matchesAhead', { count: entry.matchesAhead ?? 0 })}</>;
 }
 
+/**
+ * Only two tones get a glyph, and neither is decorative.
+ *
+ * `called` and `next` used a `Flag`, which in this app's own vocabulary means *forfeit* (see
+ * EditMatchModal) — so the icon on "your turn" was the icon for "your team gave up". The
+ * headline already says it in words, at 3xl, on a solid green band. Nothing was added in its
+ * place: the fix is one fewer thing, not a better thing.
+ */
 function headlineIcon(tone: Tone) {
   if (tone === 'live') return <Radio size={20} className="animate-pulse" />;
-  if (tone === 'called' || tone === 'next') return <Flag size={20} />;
-  return <Hourglass size={18} />;
+  if (tone === 'waiting') return <Hourglass size={18} />;
+  return null;
 }
 
 // Called and live are solid fills on purpose: this is the frame a player has to read from
@@ -107,20 +115,15 @@ const FRAME: Record<Tone, string> = {
 /** A labelled fact block — the seat, the match, what is left to play. Replaces the stat tiles. */
 function Fact({
   label,
-  accent,
   className = '',
   children,
 }: {
   label: string;
-  /** Ties the block to the status strip above it — the seat matters most when you are called. */
-  accent?: 'success' | 'danger';
   className?: string;
   children: React.ReactNode;
 }) {
-  const border =
-    accent === 'success' ? 'border-success' : accent === 'danger' ? 'border-danger' : 'border-line';
   return (
-    <div className={`rounded border bg-field px-4 py-3 ${border} ${className}`}>
+    <div className={`rounded border border-line bg-field px-4 py-3 ${className}`}>
       <p className="mds-uppercase-label text-fg-subtle">{label}</p>
       <div className="mt-1.5">{children}</div>
     </div>
@@ -154,7 +157,7 @@ function CallCard({
       {/* role=status: the queue polls, so this line changes under the player's eyes — a screen
           reader should announce "you're up" the moment a marshal calls the match. */}
       <div role="status" className={`flex items-start gap-3 px-4 py-3 sm:px-5 ${STRIP[tone]}`}>
-        <span className="mt-0.5 shrink-0">{headlineIcon(tone)}</span>
+        {headlineIcon(tone) && <span className="mt-0.5 shrink-0">{headlineIcon(tone)}</span>}
         <p
           className={`font-brand font-bold leading-tight [text-wrap:balance] ${onNow ? 'text-2xl sm:text-3xl' : 'text-base sm:text-lg'}`}
         >
@@ -166,7 +169,10 @@ function CallCard({
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           {/* A tournament name is content: the organiser's own casing, and it may wrap. */}
           <p className="mds-name text-sm text-fg-muted">{entry.tournamentName}</p>
-          <StatusBadge status={m.status} />
+          {/* When the match is happening now, the band above already says so in the loudest
+              type on the page. A small badge repeating it is the second statement of one fact,
+              and the kid reads both before acting on either. */}
+          {!onNow && <StatusBadge status={m.status} />}
         </div>
 
         <h2 className="mds-name-lg text-xl sm:text-2xl">
@@ -176,27 +182,24 @@ function CallCard({
             vs: (chunks) => <span className="font-normal text-fg-subtle">{chunks}</span>,
           })}
         </h2>
+        {/* The stage belongs under the matchup it describes, in muted type — not in a bordered
+            box of its own next to the seat, where "BO1" in the numeric face read as a second
+            seat code sixty pixels below the real one. */}
+        <p className="-mt-2 text-sm text-fg-muted">
+          {t(`stage.${stageKey(m.bracketType)}`, { round: m.round })}
+        </p>
 
         <div className="grid gap-3 sm:grid-cols-3">
-          <Fact
-            label={t('seat.label')}
-            accent={tone === 'live' ? 'danger' : tone === 'called' ? 'success' : undefined}
-            className={onNow ? 'sm:col-span-2' : ''}
-          >
+          {/* One green frame around the card, one green band on top of it, and the seat as the
+              largest glyph inside. The accent border made a third green edge competing with
+              both. */}
+          <Fact label={t('seat.label')} className={onNow ? 'sm:col-span-3' : ''}>
             <SeatEditor
               size="lg"
               tournamentId={entry.tournamentId}
               seating={seating}
               onSaved={() => onSeatSaved?.()}
             />
-          </Fact>
-          <Fact label={t('fact.match')}>
-            <p className="mds-numeric text-sm font-bold">
-              {t('fact.matchLine', {
-                stage: t(`stage.${stageKey(m.bracketType)}`, { round: m.round }),
-                bestOf: m.bestOf,
-              })}
-            </p>
           </Fact>
           {!onNow && entry.totalPending > 0 && (
             <Fact label={t('fact.stillToPlay')}>
@@ -288,6 +291,17 @@ function CardSkeleton() {
  * on the first frame and the /api/me/queue round-trip only adds the queue position to it — the
  * player never watches a skeleton where the answer was already on screen.
  */
+/**
+ * Does this tournament already have a call card on the desk?
+ *
+ * Exported because the tournament list below the queue has to drop the same entries, and the
+ * two answers drifting apart is what put a second copy of the seat code and the pencil on the
+ * screen directly under the green card — twice the B01, twice the edit, one kid.
+ */
+export function hasCallCard(entry: QueueEntry): boolean {
+  return entry.state === 'SCHEDULED' && Boolean(entry.nextMatch);
+}
+
 export function MyQueue({
   fallback = [],
   seats = {},
@@ -312,7 +326,7 @@ export function MyQueue({
 
   const entries = data?.queue ?? fallback;
   const scheduled = entries
-    .filter((q) => q.state === 'SCHEDULED' && q.nextMatch)
+    .filter(hasCallCard)
     .sort((a, b) => {
       const rank = (e: QueueEntry) => ({ live: 0, called: 1, next: 2, waiting: 3 })[toneOf(e)];
       return rank(a) - rank(b) || (a.matchesAhead ?? 99) - (b.matchesAhead ?? 99);
@@ -320,8 +334,7 @@ export function MyQueue({
 
   if ((!enabled || isLoading || profileLoading) && entries.length === 0) {
     return (
-      <section className="space-y-3" aria-busy="true">
-        <p className="mds-uppercase-label text-fg-subtle">{t('queue.label')}</p>
+      <section className="space-y-3" aria-busy="true" aria-label={t('queue.label')}>
         <CardSkeleton />
       </section>
     );
@@ -364,8 +377,10 @@ export function MyQueue({
   }
 
   return (
-    <section className="space-y-3">
-      <p className="mds-uppercase-label text-fg-subtle">{t('queue.label')}</p>
+    // The heading is an aria-label, not a line of text. "KØEN DIN" sat between the kid's name
+    // and the green card telling them where to go, and a label naming a region they can see is
+    // one more thing to read past at the exact moment they should be standing up.
+    <section className="space-y-3" aria-label={t('queue.region')}>
       {errorBanner}
       {scheduled.map((entry) => {
         const server = servers[entry.nextMatch!.id];

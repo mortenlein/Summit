@@ -113,15 +113,19 @@ export function TopNav() {
               {tc('signIn')}
             </Link>
           )}
-          {/* The palette is the fast path (⌘K / "/"), but it needs a visible door too —
-              a phone has no keyboard, and nothing else in the chrome announces it exists. */}
+          {/* The palette is the fast path (⌘K / "/") for the organizer and the crew on a laptop,
+              and it keeps its visible door there. It is hidden on phones on purpose: a
+              12-year-old has no keyboard shortcut to discover, every command behind it is a link
+              already in the hamburger drawer, and it was the fourth glyph in a row of four on a
+              390px header. Tournament pages keep a labelled phone door of their own
+              (`tournament-open-command-palette`), which is where a kid would look for one. */}
           <button
             type="button"
             aria-label={t('palette.open')}
             title={t('palette.openTitle')}
             data-testid="open-command-palette"
             onClick={openCommandPalette}
-            className="mds-tap flex items-center justify-center rounded-sm p-2 text-fg-muted transition-colors hover:bg-tint hover:text-fg"
+            className="mds-tap hidden items-center justify-center rounded-sm p-2 text-fg-muted transition-colors hover:bg-tint hover:text-fg md:flex"
           >
             <Command size={17} aria-hidden />
           </button>

@@ -35,8 +35,6 @@
     "round": "Round {round}"
   },
   "fact": {
-    "match": "Your match",
-    "matchLine": "{stage} · BO{bestOf}",
     "stillToPlay": "Still to play",
     "stillToPlayCount": "{count, plural, one {# match} other {# matches}}"
   },
@@ -74,11 +72,11 @@
     "label": "Your seat",
     "none": "No seat set",
     "set": "Set your seat",
-    "helper": "Marshals use this to find you. You can change it later.",
+    "helper": "The crew use this to find you.",
     "placeholder": "e.g. B12",
     "cancelAria": "Cancel seat edit",
     "savedTitle": "Seat saved: {seat}",
-    "savedHint": "Marshals can now find you on the floor.",
+    "savedHint": "The crew can now find you on the floor.",
     "clearedTitle": "Seat cleared",
     "errorTitle": "Could not save your seat",
     "errorHint": "Please try again."

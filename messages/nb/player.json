@@ -35,8 +35,6 @@
     "round": "Runde {round}"
   },
   "fact": {
-    "match": "Kampen din",
-    "matchLine": "{stage} · BO{bestOf}",
     "stillToPlay": "Igjen å spille",
     "stillToPlayCount": "{count, plural, one {# kamp} other {# kamper}}"
   },
@@ -74,7 +72,7 @@
     "label": "Plassen din",
     "none": "Ingen plass satt",
     "set": "Sett plassen din",
-    "helper": "Crewet bruker denne for å finne deg. Du kan endre den senere.",
+    "helper": "Crewet bruker denne for å finne deg.",
     "placeholder": "f.eks. B12",
     "cancelAria": "Avbryt redigering av plass",
     "savedTitle": "Plassen er lagret: {seat}",

@@ -92,7 +92,7 @@ The player-facing moments. These carry the whole product, so they are worth argu
 | Waiting | 3 matches ahead of you | **3 kamper foran deg** |
 | Knocked out | Your team is out of {tournament} | **Laget ditt er ute av {turnering}** |
 | Not drawn yet | Not drawn yet | **Ikke trukket ennå** |
-| Seat prompt | Marshals use this to find you. You can change it later. | **Crewet bruker dette for å finne deg. Du kan endre det senere.** |
+| Seat prompt | The crew use this to find you. | **Crewet bruker denne for å finne deg.** (*plass* is masculine → *denne*, not *dette*) |
 | Invite | Send this to your teammates | **Send denne til lagkameratene dine** |
 | Team full | This team is already full | **Dette laget er fullt** |
 | Push title | Your match is ready | **Kampen din er klar** |
@@ -113,7 +113,7 @@ The player-facing moments. These carry the whole product, so they are worth argu
 | Leave team | **Forlat laget** |
 | Call match | **Kall opp** |
 | Mark live | **Sett live** |
-| Generate bracket | **Lag kampoppsett** |
+| Generate bracket | **Lag bracket** |
 | Copy | **Kopier** |
 
 ---

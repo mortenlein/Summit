@@ -67,9 +67,16 @@ async function leoQueueEntry(tournamentId: string) {
   return entry;
 }
 
-/** The MyQueue section on the player desk — the only part of the page that polls. */
+/**
+ * The MyQueue section on the player desk — the only part of the page that polls.
+ *
+ * Found by its accessible name, not by a visible "Your queue" heading. That heading is gone on
+ * purpose: it sat between the kid's name and the green card telling them where to go, naming a
+ * region they can already see. The name still exists for a screen reader, which is what this
+ * locator reads.
+ */
 function queueSection(page: Page) {
-  return page.locator('section').filter({ hasText: 'Your queue' });
+  return page.getByRole('region', { name: 'Match status' });
 }
 
 test('the desk shows the tournament, the next opponent and a queue position that matches the API', async ({ page }) => {
@@ -90,12 +97,19 @@ test('the desk shows the tournament, the next opponent and a queue position that
 
   // The queue card: same tournament, same opponent, and the number the API just reported.
   const card = queueSection(page).locator('.mds-card').filter({ hasText: tournamentName });
-  await expect(card).toContainText('Round 1 · BO1');
+  // The stage reads on its own muted line under the matchup. No "· BO1": bestOf is 1 for every
+  // round by default, so it was a constant — and in the numeric face it read as a second seat
+  // code sitting below the real one.
+  await expect(card).toContainText('Round 1');
+  await expect(card).not.toContainText('BO1');
   await expect(card).toContainText(entry.nextMatch.opponent);
   await expect(card).toContainText('3 matches ahead of you');
 
-  // …and the desk lists the tournament itself under "Your tournaments".
-  await expect(page.getByRole('heading', { name: tournamentName })).toBeVisible();
+  // …and it is NOT listed a second time below. A tournament with a call card is already fully
+  // answered by that card — seat, opponent, server — so repeating it put a second seat code and
+  // a second pencil under the kid's thumb, and the second pencil is the wrong one to press.
+  const list = page.getByRole('region', { name: 'Your tournaments' });
+  await expect(list).toHaveCount(0);
 });
 
 test('empty later-round slots are not counted as matches ahead — unless they have been called', async ({ page }) => {
@@ -177,7 +191,7 @@ test('winning moves the queue on to the next round against a yet-unknown opponen
   await loginAs(page, 'leo');
   await page.goto('/dashboard');
   const card = queueSection(page).locator('.mds-card').filter({ hasText: tournamentName });
-  await expect(card).toContainText('Round 2 · BO1');
+  await expect(card).toContainText('Round 2');
   await expect(card).toContainText('TBD');
 });
 
@@ -200,7 +214,10 @@ test('losing empties the desk: no queue card, and the desk says you are knocked 
   // match that is never coming.
   await expect(page.getByRole('heading', { name: 'Knocked out', exact: true })).toBeVisible();
   await expect(page.getByText('Your team is out of Queue Eliminated Cup')).toBeVisible();
-  await expect(queueSection(page)).toBeHidden();
+  // The region stays — it is where the "Knocked out" line above lives — but it holds no call
+  // card. Asserting the region is gone would only ever have tested that the heading text was
+  // gone, and that heading is now an accessible name rather than a line of type.
+  await expect(queueSection(page).locator('.mds-card')).toHaveCount(0);
   // The tournament stays on the desk — being knocked out is not being un-registered.
   await expect(page.getByRole('heading', { name: 'Queue Eliminated Cup' })).toBeVisible();
 });
@@ -216,5 +233,5 @@ test('a registered player with no bracket yet is NO_BRACKET, not "up next"', asy
   await loginAs(page, 'leo');
   await page.goto('/dashboard');
   await expect(page.getByRole('heading', { name: 'Queue No Bracket Cup' })).toBeVisible();
-  await expect(queueSection(page)).toBeHidden();
+  await expect(queueSection(page).locator('.mds-card')).toHaveCount(0);
 });
