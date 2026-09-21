@@ -526,7 +526,14 @@ export function useManageWorkspace(tournamentId: string) {
     const loadMatch = async (matchId: string) => {
         try {
             const result: any = await loadMatchMutation.mutateAsync(matchId);
-            toast.success(t('matchCalled'), result.message || t('matchCalledHint'));
+            // Never `result.message ||` — that preferred a server-rendered English sentence over
+            // the crew's own language, and the sentence it carried claimed both teams had been
+            // notified, which the route cannot know. The copy lives in `messages/` like
+            // everything else, and it promises an attempt, not a delivery.
+            toast.success(
+                t('matchCalled'),
+                result?.recall ? t('matchAlreadyCalledHint') : t('matchCalledHint')
+            );
         } catch (error) {
             showMutationError(error, t('couldNotStartMatch'));
         }

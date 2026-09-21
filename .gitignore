@@ -67,3 +67,6 @@ lan_stress.md
 
 # Claude Code agent worktrees
 .claude/worktrees/
+
+# e2e Discord DM failure-simulation control file (playwright.config.ts)
+prisma/e2e-*-dm-sim.json

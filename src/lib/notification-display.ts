@@ -16,6 +16,8 @@
  */
 const TITLE_KEYS: Record<string, string> = {
   'Match ready for players': 'discord.matchTitle',
+  'Match is live': 'discord.liveTitle',
+  'Up next': 'discord.upnextTitle',
   'Result posted': 'discord.resultTitle',
   'Player registered': 'discord.signupTitle',
   'Bracket is live': 'discord.bracketLiveTitle',

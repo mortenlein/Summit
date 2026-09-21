@@ -82,9 +82,11 @@ test('match_live puts the referenced match live and calls both rosters', async (
   expect(await json(res)).toEqual({ success: true });
 
   expect((await readMatch(match.id)).status).toBe('LIVE');
-  // Going live from the server also calls both rosters through the normal notify path.
+  // Going live from the server also calls both rosters through the normal notify path — with
+  // the *live* wording, not the call-up's. A match that is already being played is the one
+  // thing "Match ready for players" is not.
   expect((await readNotifications(tournament.id)).map((row) => [row.type, row.title])).toEqual([
-    ['MATCH', 'Match ready for players'],
+    ['MATCH', 'Match is live'],
   ]);
 });
 

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { seedEmptyTournament, seedLanScenario } from './helpers/seed';
+import { seedEmptyTournament, seedLanScenario, setMatchStatus } from './helpers/seed';
 import { loginAs } from './helpers/auth';
 
 test.describe.configure({ mode: 'serial' });
@@ -12,6 +12,11 @@ async function loginAsAdmin(page: import('@playwright/test').Page) {
 
 test('Marcus can start a match and Uncle Dave sees seats plus notifications', async ({ browser, page }) => {
   const { tournamentId, matchId } = await seedLanScenario();
+  // The fixture seeds this match already READY. This test is about Marcus *calling* it, and a
+  // call only does anything to a match that has not been called — so put it back to PENDING
+  // first. It used to pass against a called match only because /load re-ran the whole fan-out on
+  // every tap, which also wiped both rosters' check-in stamps and re-buzzed every phone.
+  await setMatchStatus(matchId, 'PENDING');
   page.on('dialog', async (dialog) => {
     await dialog.accept();
   });

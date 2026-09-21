@@ -190,6 +190,15 @@ model NotificationLog {
   description String?
   tournamentId String?
   createdAt   DateTime @default(now())
+  /// Set only on announcements that must happen once ever — today, the "up next" post. NULL on
+  /// ordinary rows, and SQLite treats NULLs as distinct in a unique index, so ordinary rows never
+  /// collide with each other. Creating the row IS the claim: a P2002 means another trigger got
+  /// there first. Same pattern, and the same reason, as DiscordDmAttempt's unique key.
+  dedupeKey   String?  @unique
+  /// When the Discord post for this row actually went out. NULL means "logged, not yet
+  /// delivered" — a retryable state. It is deliberately not a boolean: the row is written before
+  /// the send, so "no timestamp" has to be able to mean both "in flight" and "failed, try again".
+  deliveredAt DateTime?
   tournament  Tournament? @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 }
 
@@ -246,7 +255,15 @@ model DiscordDmAttempt {
   /// LINK_PROBE | MATCH_CALLED | MATCH_LIVE | MATCH_UPCOMING | MATCH_RESULT
   event       String
   matchId     String?
-  /// SENT | BLOCKED | UNKNOWN_USER | RATE_LIMITED | ERROR | SKIPPED_OPTOUT
+  /// PENDING | SENT | MOCKED | BLOCKED | UNKNOWN_USER | RATE_LIMITED | ERROR
+  /// | SKIPPED_OPTOUT | SKIPPED_DISABLED | SKIPPED_PAUSED
+  /// SENT means Discord's API accepted the message (200/204) and nothing else. It is never
+  /// written for a message that was not really handed to Discord: a mock run records MOCKED and
+  /// a suppressed send records its own SKIPPED_* reason, so no counter can round them up. Only
+  /// discord-dm.ts writes these rows, because only it knows whether the transport really
+  /// reached Discord (DmTransport.real). One name per state, not three — two parallel branches
+  /// independently called MOCKED "MOCK" and "SIMULATED", and a vocabulary that drifts is how
+  /// "we sent it" ends up meaning four different things again.
   outcome     String
   /// Discord's own JSON error code, e.g. 50007 "Cannot send messages to this user".
   discordCode Int?

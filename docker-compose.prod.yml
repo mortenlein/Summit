@@ -24,3 +24,64 @@ services:
       DATABASE_URL: file:/app/data/prod.db
       NEXTAUTH_URL: https://turnering.mortenlab.xyz
     restart: unless-stopped
+
+  # The gateway bot. Deliberately small: it receives `/koble`, `/stopp` and the "Stopp DM"
+  # button from Discord and POSTs them to `summit` over this compose network. It holds no
+  # database, no translations and no send path — the app does ALL sending, channel posts and
+  # DMs alike (docs/discord-bot-spec.md §1).
+  #
+  # If this container is down, nobody can link a Discord account. Nothing else breaks: the
+  # bracket, the marshal board, scoring, push and the channel announcements are all the app.
+  # That is the point of the split, not a shortcoming of it.
+  #
+  #   docker compose -f docker-compose.prod.yml up -d --build summit-bot
+  summit-bot:
+    build:
+      context: .
+      target: bot
+    container_name: summit-bot
+    # Same uid as `summit` (== the image's `node` user), for house consistency. The bot has no
+    # bind mounts at all — no ./data, which is the true and sufficient statement of "the bot
+    # cannot touch the database".
+    user: "1000:1000"
+    # PID 1 that reaps children and forwards SIGTERM, so `restart`/`stop` is clean.
+    init: true
+    # NOT `.env` — that file holds NEXTAUTH_SECRET and STEAM_API_KEY, and an always-on process
+    # with an outbound socket to Discord has no business with either. See .env.example.
+    #
+    # `required: false` so that a host without .env.bot yet can still deploy the APP: a hard
+    # requirement here would make `up -d` fail for the whole project, including `summit`.
+    # Without the file the bot starts, logs exactly which variable is missing, waits 30s and
+    # exits 1 — visible in `docker logs summit-bot` and unhealthy to server-vakt.
+    env_file:
+      - path: .env.bot
+        required: false
+    environment:
+      NODE_ENV: production
+      TZ: Europe/Oslo
+    # No `ports:`. /healthz is for the container HEALTHCHECK and for `summit` on this network;
+    # nothing about the bot is reachable from the host or the tunnel. Reach it for debugging
+    # with `docker exec summit-bot wget -qO- http://127.0.0.1:4002/status`.
+    #
+    # No `networks:` either, deliberately: this service is in the same compose project as
+    # `summit`, so both land on the project's existing default bridge and the bot reaches the
+    # app as `http://summit:4001`. Do NOT declare a new network — ash's default address pools
+    # have run out before, which is why three other apps on this host run `network_mode: bridge`.
+    depends_on:
+      # Start order only — never `condition: service_healthy`. The bot is useful the moment
+      # Discord accepts it, and a kid running /koble while the app restarts gets a "Summit
+      # isn't responding" reply, which is honest and recovers by itself.
+      - summit
+    mem_limit: 512m
+    stop_grace_period: 20s
+    restart: unless-stopped
+    healthcheck:
+      # Liveness only: is the process alive and is the gateway READY or reconnecting. It must
+      # NOT depend on `summit` being up, or every `up -d --build summit` would flip the bot
+      # unhealthy and server-vakt (cron */10 on ash) would ntfy the organizer about it.
+      # `wget` is busybox-native in alpine — cheaper than spawning a 40 MB node every 15s.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4002/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 40s

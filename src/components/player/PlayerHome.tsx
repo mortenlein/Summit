@@ -100,6 +100,11 @@ export function PlayerHome({
         />
 
         <TournamentList registrations={registrations} loading={loading} onSeatSaved={refreshProfile} />
+
+        {/* No Discord card here, deliberately. Spec §6: "Player desk: nothing. No card, no
+            badge, no nag, ever" — and `docs/kid-clutter-plan.md` is actively stripping this
+            surface down to one question. The card lives on /profile, and acquisition happens
+            in Discord itself (a pinned three-step post in #turnering). */}
       </main>
     </div>
   );

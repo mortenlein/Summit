@@ -624,3 +624,107 @@ export async function readTeam(teamId: string) {
     include: { players: { orderBy: { name: 'asc' } } },
   });
 }
+
+// --- Discord fixtures (e2e/discord-dm.spec.ts) ------------------------------------------------
+// A DM only ever goes to a `User` that has redeemed a link code, so every Discord assertion
+// starts by planting that row. There is no bot token in a test run: `src/lib/discord-dm.ts`
+// takes its mock transport, writes the same attempt rows, and appends what it *would* have sent
+// to DISCORD_DM_LOG.
+
+export interface DiscordLinkOptions {
+  discordId?: string;
+  discordUsername?: string;
+  /**
+   * When the cache was last rewritten. Settable on its own so a test can build the nasty case:
+   * a fresh refusal in the cache sitting on top of an older accepted attempt.
+   */
+  dmCheckedAt?: Date;
+  optOut?: boolean;
+  dmState?: 'UNKNOWN' | 'SENT' | 'BLOCKED';
+  dmChannelId?: string | null;
+}
+
+/** Bind a Discord account to a Summit user, replacing any link either side already had. */
+export async function linkDiscord(userId: string, options: DiscordLinkOptions = {}) {
+  const discordId = options.discordId ?? `dc-${Math.random().toString(36).slice(2, 10)}`;
+  await prisma.discordLink.deleteMany({ where: { userId } });
+  await prisma.discordLink.deleteMany({ where: { discordId } });
+  return prisma.discordLink.create({
+    data: {
+      userId,
+      discordId,
+      discordUsername: options.discordUsername ?? `player_${discordId}`,
+      dmCheckedAt: options.dmCheckedAt ?? null,
+      optOut: options.optOut ?? false,
+      dmState: options.dmState ?? 'UNKNOWN',
+      dmChannelId: options.dmChannelId ?? null,
+    },
+  });
+}
+
+/** Forget a user's Discord account, and every attempt row belonging to them. */
+export async function clearDiscordLink(userId: string) {
+  await prisma.discordDmAttempt.deleteMany({ where: { userId } });
+  await prisma.discordLink.deleteMany({ where: { userId } });
+}
+
+export async function readDiscordLink(userId: string) {
+  return prisma.discordLink.findUnique({ where: { userId } });
+}
+
+/** Every DM attempt written for a match, oldest first — the record nothing may claim without. */
+export async function readDmAttempts(matchId: string) {
+  return prisma.discordDmAttempt.findMany({ where: { matchId }, orderBy: { createdAt: 'asc' } });
+}
+
+/** The organizer's Pause Discord switch. */
+export async function setDiscordDmPaused(tournamentId: string, discordDmPaused: boolean) {
+  return prisma.tournament.update({ where: { id: tournamentId }, data: { discordDmPaused } });
+}
+
+let discordCounter = 0;
+
+// --- Discord reach fixtures (e2e/organizer-discord-reach.spec.ts) ---------------------------
+// The reach panel reads attempt rows rather than sending anything, so these plant the rows and
+// the bare users directly. `linkDiscord` above is shared with the DM specs — one helper, so a
+// link created for one suite is shaped identically to the other's.
+
+export interface DmAttemptOptions {
+  event?: string;
+  matchId?: string | null;
+  /**
+   * SENT | BLOCKED | UNKNOWN_USER | RATE_LIMITED | ERROR | SKIPPED_OPTOUT | SKIPPED_DISABLED
+   * | MOCKED. MOCKED is what a deployment that cannot talk to Discord writes — a row that proves a
+   * send was *not* made, which the panel must never count.
+   */
+  outcome: string;
+  discordCode?: number | null;
+  locale?: string;
+  /** Back-date the evidence, to test which of two facts is the newer one. */
+  createdAt?: Date;
+}
+
+/** A bare `User` row — the thing a `Player.userId` and a `DiscordLink` both hang off. */
+export async function createUserRow(name: string) {
+  discordCounter += 1;
+  const suffix = `${Date.now().toString(36)}-${discordCounter}`;
+  return prisma.user.create({
+    data: { name, email: `mock+reach-${suffix}@summit.local`, steamId: nextSteamId() },
+  });
+}
+
+/** One row of proof (or of refusal) that Discord answered about this user. */
+export async function recordDmAttempt(userId: string, discordId: string, options: DmAttemptOptions) {
+  return prisma.discordDmAttempt.create({
+    data: {
+      userId,
+      discordId,
+      event: options.event ?? 'LINK_PROBE',
+      matchId: options.matchId ?? null,
+      outcome: options.outcome,
+      discordCode: options.discordCode ?? null,
+      locale: options.locale ?? 'nb',
+      ...(options.createdAt ? { createdAt: options.createdAt } : {}),
+    },
+  });
+}

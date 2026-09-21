@@ -24,5 +24,7 @@
   "forfeit_side_invalid": "forfeit must be HOME or AWAY",
   "best_of_too_low": "bestOf must be at least 1",
   "downstream_started": "Downstream match {matchRef} has already started — reset it first.",
-  "both_teams_required": "Both teams must be assigned before loading a match"
+  "both_teams_required": "Both teams must be assigned before loading a match",
+  "match_already_live": "This match is already being played. It cannot be called again.",
+  "match_already_complete": "This match is already finished. It cannot be called again."
 }

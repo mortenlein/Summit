@@ -20,6 +20,20 @@ export interface SeededTournament {
   tournamentId: string;
 }
 
+/**
+ * Put a seeded match back to a given status.
+ *
+ * `seedLanScenario` seeds its match already `READY`, because the marshal board and the
+ * one-click join link both need a *called* match to show anything. A spec that exercises
+ * **calling** a match therefore has to un-call it first: `/api/matches/{id}/load` refuses to
+ * re-call a match that is already called (re-running it wiped both rosters' check-in stamps
+ * and re-ran the whole notification fan-out), so clicking "start match" on the fixture as
+ * seeded is a no-op and announces nothing.
+ */
+export async function setMatchStatus(matchId: string, status: string) {
+  return prisma.match.update({ where: { id: matchId }, data: { status } });
+}
+
 export async function seedLanScenario(): Promise<SeededScenario> {
   await prisma.notificationLog.deleteMany();
   await prisma.auditLog.deleteMany();

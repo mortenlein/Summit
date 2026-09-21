@@ -1,0 +1,48 @@
+{
+  "card": {
+    "title": "Link Discord",
+    "optional": "Optional",
+    "body": "Link Discord and you'll get a message there when your match is called.",
+    "caveat": "Discord is an extra alert. The crew still comes to get you.",
+    "getCode": "Get a code",
+    "stepJoin": "Join the Discord server",
+    "stepJoinAction": "Open invite",
+    "stepCommand": "Type /koble in Discord and pick it from the menu",
+    "stepCode": "Paste the code",
+    "codeLabel": "Your code",
+    "copy": "Copy",
+    "copied": "Copied",
+    "expires": "The code works for {minutes, plural, one {# more minute} other {# more minutes}}.",
+    "expiresSeconds": "The code works for {seconds, plural, one {# more second} other {# more seconds}}.",
+    "expired": "That code expired. Get a new one.",
+    "newCode": "New code",
+    "waiting": "Waiting for you to type /koble in Discord.",
+    "linked": "Linked to Discord as {username}",
+    "unlink": "Unlink",
+    "dmSent": "I was able to send you a message on Discord.",
+    "dmUnconfirmed": "Not confirmed yet. You still get the in-app alert.",
+    "dmBlockedTitle": "I can't DM you",
+    "dmBlockedBody": "Turn on direct messages from server members in your Discord settings, then run /koble again.",
+    "optedOutNotice": "You've stopped DMs from Summit.",
+    "resume": "Turn DMs back on",
+    "error": "That didn't work. Try again."
+  },
+  "dm": {
+    "probe": {
+      "body": "Your Discord account is linked to Summit. You'll get a message here when your match is called. Discord is an extra alert — the crew will come get you either way. You can unlink any time at turnering.mortenlab.xyz."
+    },
+    "stopButton": "Stop DMs"
+  },
+  "bot": {
+    "linkedReply": "Linked! You're **{name}** on Summit. I've sent you a message — check your DMs.",
+    "linkedReplyBlocked": "Linked! You're **{name}** on Summit. But I can't DM you. Turn on direct messages from server members in your Discord settings, then run `/koble` again.",
+    "linkedReplyUnconfirmed": "Linked! You're **{name}** on Summit. I couldn't confirm the DM got through, but you still get the in-app alert, and the crew comes for you.",
+    "linkedReplyDmOff": "Linked! You're **{name}** on Summit. DMs from Summit are switched off right now, so I haven't sent you one. You still get the in-app alert, and the crew comes for you.",
+    "unknownCode": "I couldn't find that code, or it expired. Get a new one at turnering.mortenlab.xyz → Profile → Link Discord.",
+    "alreadyTaken": "This Discord account is already linked to another Summit user. Tell the crew and they'll sort it out.",
+    "noCode": "Type `/koble` and paste the code from turnering.mortenlab.xyz → Profile → Link Discord.",
+    "notLinked": "This Discord account isn't linked to Summit.",
+    "optedOut": "OK, no more DMs. You still get the in-app alert, and the crew comes for you either way.",
+    "optedIn": "OK, you'll get DMs from Summit again."
+  }
+}

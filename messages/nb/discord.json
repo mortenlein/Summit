@@ -1,0 +1,48 @@
+{
+  "card": {
+    "title": "Koble Discord",
+    "optional": "Valgfritt",
+    "body": "Koble Discord, så får du en melding der når kampen din blir kalt opp.",
+    "caveat": "Discord er et ekstra varsel. Crewet henter deg uansett.",
+    "getCode": "Hent kode",
+    "stepJoin": "Bli med i Discord-serveren",
+    "stepJoinAction": "Åpne invitasjon",
+    "stepCommand": "Skriv /koble i Discord og velg den fra menyen",
+    "stepCode": "Lim inn koden",
+    "codeLabel": "Koden din",
+    "copy": "Kopier",
+    "copied": "Kopiert",
+    "expires": "Koden gjelder i {minutes, plural, one {# minutt} other {# minutter}}.",
+    "expiresSeconds": "Koden gjelder i {seconds, plural, one {# sekund} other {# sekunder}} til.",
+    "expired": "Koden gikk ut. Hent en ny.",
+    "newCode": "Ny kode",
+    "waiting": "Venter på at du skriver /koble i Discord.",
+    "linked": "Koblet til Discord som {username}",
+    "unlink": "Koble fra",
+    "dmSent": "Jeg fikk sendt deg en melding på Discord.",
+    "dmUnconfirmed": "Ikke bekreftet ennå. Du får beskjed i appen uansett.",
+    "dmBlockedTitle": "Jeg får ikke sendt deg DM",
+    "dmBlockedBody": "Skru på direktemeldinger fra servermedlemmer i Discord-innstillingene, og kjør /koble på nytt.",
+    "optedOutNotice": "Du har stoppet DM-er fra Summit.",
+    "resume": "Skru på DM igjen",
+    "error": "Det gikk ikke. Prøv en gang til."
+  },
+  "dm": {
+    "probe": {
+      "body": "Discord-kontoen din er koblet til Summit. Du får en melding her når kampen din blir kalt opp. Discord er et ekstra varsel — crewet henter deg uansett. Du kan koble fra når som helst på turnering.mortenlab.xyz."
+    },
+    "stopButton": "Stopp DM"
+  },
+  "bot": {
+    "linkedReply": "Koblet! Du er **{name}** på Summit. Jeg har sendt deg en melding – se i DM-ene dine.",
+    "linkedReplyBlocked": "Koblet! Du er **{name}** på Summit. Men jeg får ikke sendt deg DM. Skru på direktemeldinger fra servermedlemmer i Discord-innstillingene, og kjør `/koble` på nytt.",
+    "linkedReplyUnconfirmed": "Koblet! Du er **{name}** på Summit. Jeg fikk ikke bekreftet at DM-en kom fram, men du får beskjed i appen uansett, og crewet henter deg.",
+    "linkedReplyDmOff": "Koblet! Du er **{name}** på Summit. DM-er fra Summit er skrudd av akkurat nå, så jeg har ikke sendt deg noen. Du får beskjed i appen uansett, og crewet henter deg.",
+    "unknownCode": "Fant ikke koden, eller så har den gått ut. Hent en ny på turnering.mortenlab.xyz → Profil → Koble Discord.",
+    "alreadyTaken": "Denne Discord-kontoen er allerede koblet til en annen Summit-bruker. Si fra til crewet, så ordner de det.",
+    "noCode": "Skriv `/koble` og lim inn koden du finner på turnering.mortenlab.xyz → Profil → Koble Discord.",
+    "notLinked": "Denne Discord-kontoen er ikke koblet til Summit.",
+    "optedOut": "Ok, jeg sender deg ikke flere DM-er. Du får fortsatt varsel i appen, og crewet henter deg uansett.",
+    "optedIn": "Ok, du får DM-er fra Summit igjen."
+  }
+}

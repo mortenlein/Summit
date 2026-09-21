@@ -26,6 +26,32 @@ process.env.STEAM_API_KEY = 'e2e-placeholder';
 process.env.E2E_LOCALE = 'en';
 // Inbound CS2 webhook bearer key — explicit so tests never depend on (or leak) the real .env.
 process.env.CS2_WEBHOOK_KEY = 'e2e-cs2-webhook-key';
+// Discord account linking has to be *configured* for its specs to mean anything: the card and
+// the bot callbacks self-hide (null / 503) when these are unset, exactly like push with no
+// VAPID keys, so every assertion would otherwise pass for the wrong reason. Test-only values —
+// no real guild, no real invite, and deliberately NOT the CS2 key (that one goes to a game
+// server).
+process.env.SUMMIT_BOT_KEY = 'e2e-summit-bot-key';
+process.env.DISCORD_GUILD_ID = '000000000000000001';
+process.env.DISCORD_INVITE_URL = 'https://discord.gg/e2e-6614gamers';
+// A placeholder token, because `isDiscordLinkConfigured()` requires one: without the token the
+// app cannot open a DM channel at all, so the card hides rather than walking a kid through
+// three steps for a link that can never deliver. Nothing dials Discord with this string —
+// NEXT_PUBLIC_STRATEGY_3_MOCK above is the *only* thing that selects the mock probe, and the
+// mock records MOCKED, never SENT.
+process.env.DISCORD_BOT_TOKEN = 'e2e-placeholder-bot-token';
+// The hard master switch (§5) ships false. The suite flips it on, or every probe would record
+// SKIPPED_DISABLED and the BLOCKED path — the one that decides whether a marshal walks — would
+// never be exercised.
+process.env.DISCORD_DM_ENABLED = 'true';
+// One snowflake the mock DM probe refuses with Discord's real 50007, so the BLOCKED path —
+// the one that decides whether a marshal walks to a seat — is assertable without a token.
+process.env.DISCORD_DM_MOCK_BLOCKED = '300000000000000900';
+// The channel-post equivalent of DISCORD_DM_SIMULATE: a spec writes `{"fail": true}` here to
+// make the mock delivery path report a failed post, which is the only way to test that a
+// once-per-match announcement survives a bad minute at Discord instead of spending its one
+// chance on it.
+process.env.DISCORD_ANNOUNCE_SIMULATE = path.resolve(process.cwd(), 'prisma', `e2e-${E2E_PORT}-announce-sim.json`);
 // Web push has to be *configured* for the player-notification specs to mean anything:
 // /api/push/public-key hands back null and sendPushToUsers() returns before touching a
 // subscription when VAPID is unset, so "delivery was attempted" would be unfalsifiable.
@@ -39,6 +65,24 @@ process.env.VAPID_SUBJECT = 'mailto:e2e@summit.local';
 // everywhere else, including production) — that is how player-push.spec.ts can see that two
 // players on one match were written to in two different languages.
 process.env.PUSH_DELIVERY_LOG = path.resolve(process.cwd(), 'prisma', `e2e-${E2E_PORT}-push.log`);
+// Discord DMs. There is no bot token in a test run (and none on the box yet), so
+// `src/lib/discord-dm.ts` takes its mock transport — but the fan-out itself, the attempt rows
+// and the per-locale composition are the real code path, and DISCORD_DM_ENABLED has to be on or
+// the whole thing returns before touching a recipient and every assertion passes for the wrong
+// reason. Same posture as VAPID above.
+process.env.DISCORD_DM_ENABLED = 'true';
+// The config circuit breaker holds for five minutes in production. A spec has to be able to
+// watch it trip AND watch it heal, and it must not poison the DM specs that run after it, so
+// the harness shortens the cooldown rather than adding a reset backdoor to the module.
+process.env.DISCORD_DM_BREAKER_MS = '1500';
+// One JSON line per DM attempt — what would have been sent, and what Discord answered. This is
+// the only way a spec can read a message body that, in production, exists nowhere but a kid's
+// phone. Mirrors PUSH_DELIVERY_LOG; unset everywhere else, including production.
+process.env.DISCORD_DM_LOG = path.resolve(process.cwd(), 'prisma', `e2e-${E2E_PORT}-dm.log`);
+// Lets a spec make Discord fail in a named way (50007 "DMs closed", 429, …). The error table is
+// the half of the DM sender most likely to be wrong and is otherwise unreachable without a real
+// token and a real kid with DMs switched off. Read fresh on every send; unset in production.
+process.env.DISCORD_DM_SIMULATE = path.resolve(process.cwd(), 'prisma', `e2e-${E2E_PORT}-dm-sim.json`);
 
 export default defineConfig({
   testDir: './e2e',

@@ -36,6 +36,69 @@ test('calling a match makes it READY and posts to the staff notification feed', 
   expect(away.name).toBe('Away Crew');
 });
 
+test('a second tap on an already-called match keeps the check-ins the marshal just collected', async () => {
+  const { match, home, away } = await createCallableMatch();
+  const miaApi = await apiAs('mia');
+
+  expect((await miaApi.post(`/api/matches/${match.id}/load`, { data: {} })).status()).toBe(200);
+
+  // The marshal walks the row and ticks both kids in.
+  for (const playerId of [home.players[0].id, away.players[0].id]) {
+    expect(
+      (await miaApi.post(`/api/players/${playerId}/checkin`, { data: { checkedIn: true } })).status()
+    ).toBe(200);
+  }
+
+  // Then taps "Call match" again, because the board had not caught up in a loud room. This used
+  // to run the per-call reset a second time and wipe the walk they had just done.
+  const second = await miaApi.post(`/api/matches/${match.id}/load`, { data: {} });
+  expect(second.status()).toBe(200);
+  const body = await json<any>(second);
+  expect(body.recall).toBe(true);
+  expect(body.match.status).toBe('READY');
+
+  for (const playerId of [home.players[0].id, away.players[0].id]) {
+    expect((await readPlayer(playerId))!.checkedInAt).not.toBeNull();
+  }
+});
+
+test('a called match still resets check-in for the match after it', async () => {
+  // The re-call guard must not cost the first call its reset: check-in is per call, so a kid
+  // ticked in for one match must start the next one as "not found yet".
+  const { match, home } = await createCallableMatch();
+  const miaApi = await apiAs('mia');
+  const playerId = home.players[0].id;
+
+  expect((await miaApi.post(`/api/players/${playerId}/checkin`, { data: { checkedIn: true } })).status()).toBe(200);
+  expect((await readPlayer(playerId))!.checkedInAt).not.toBeNull();
+
+  const called = await miaApi.post(`/api/matches/${match.id}/load`, { data: {} });
+  expect(called.status()).toBe(200);
+  expect((await json<any>(called)).recall).toBe(false);
+  expect((await readPlayer(playerId))!.checkedInAt).toBeNull();
+});
+
+test('a live or finished match refuses to be called again', async () => {
+  const { match } = await createCallableMatch();
+  const miaApi = await apiAs('mia');
+
+  expect((await miaApi.post(`/api/matches/${match.id}/load`, { data: {} })).status()).toBe(200);
+  expect((await miaApi.post(`/api/matches/${match.id}`, { data: { status: 'LIVE' } })).status()).toBe(200);
+
+  // The marshal board hides the button once a match is live, so this is a stale client. Honouring
+  // it would flip the overlay from LIVE back to CALLED mid-map.
+  const live = await miaApi.post(`/api/matches/${match.id}/load`, { data: {} });
+  expect(live.status()).toBe(409);
+  expect(await json<any>(live)).toMatchObject({ code: 'match_already_live' });
+  expect((await readMatch(match.id)).status).toBe('LIVE');
+
+  expect((await miaApi.post(`/api/matches/${match.id}`, { data: { homeScore: 1, awayScore: 0 } })).status()).toBe(200);
+  const done = await miaApi.post(`/api/matches/${match.id}/load`, { data: {} });
+  expect(done.status()).toBe(409);
+  expect(await json<any>(done)).toMatchObject({ code: 'match_already_complete' });
+  expect((await readMatch(match.id)).status).toBe('COMPLETED');
+});
+
 test('calling a match and reading the notification feed are both staff-only', async () => {
   const { tournament, match } = await createCallableMatch();
 
