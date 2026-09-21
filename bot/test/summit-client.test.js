@@ -54,12 +54,47 @@ test('401 from the app (wrong or missing bearer) is reported, never thrown', asy
   assert.match(client.stats.lastError, /401/);
 });
 
-test('503 from the app (SUMMIT_BOT_KEY unset — fail closed) is reported, never thrown', async () => {
+test('503 from the app (its own SUMMIT_BOT_KEY unset — fail closed) is reported, never thrown', async () => {
   const fetchImpl = recordingFetch(async () => jsonResponse(503, { ok: false }));
-  const client = createSummitClient({ baseUrl: 'http://x', botKey: '', fetchImpl });
+  const client = createSummitClient({ baseUrl: 'http://x', botKey: 'k', fetchImpl });
   const result = await client.postLink({ code: 'A' });
   assert.equal(result.ok, false);
   assert.equal(result.status, 503);
+});
+
+// Previously this file asserted that an empty botKey still produced a request and let the app
+// 503 it. That pinned a fail-OPEN client: on the day the app's own check regresses, an
+// anonymous `Bearer ` POST would link accounts. The bot now refuses locally.
+test('an empty SUMMIT_BOT_KEY means no request is ever made — fail closed in the bot too', async () => {
+  const fetchImpl = recordingFetch(async () => jsonResponse(200, { ok: true, reply: 'Koblet!' }));
+  const client = createSummitClient({ baseUrl: 'http://x', botKey: '', fetchImpl });
+
+  const result = await client.postLink({ code: 'A' });
+
+  assert.equal(fetchImpl.calls.length, 0, 'no POST may leave the process without a bearer key');
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 0);
+  assert.equal(result.error, 'no bot key');
+  assert.equal(client.stats.refusedNoKey, 1);
+  assert.match(client.stats.lastError, /SUMMIT_BOT_KEY/);
+});
+
+test('a whitespace-only key is treated as no key, not as a key made of spaces', async () => {
+  const fetchImpl = recordingFetch(async () => jsonResponse(200, { ok: true }));
+  const client = createSummitClient({ baseUrl: 'http://x', botKey: '   ', fetchImpl });
+  await client.postOptOut({ discordId: '1' });
+  assert.equal(fetchImpl.calls.length, 0);
+});
+
+test('a key with a pasted newline is refused rather than thrown from inside fetch', async () => {
+  // `SUMMIT_BOT_KEY=abc\n` in a hand-written .env.bot: readConfig trims it, but if anything
+  // ever hands one through, an invalid header value must not surface as a TypeError that the
+  // interaction handler reports to a player as "Summit isn't responding".
+  const fetchImpl = recordingFetch(async () => jsonResponse(200, { ok: true }));
+  const client = createSummitClient({ baseUrl: 'http://x', botKey: 'abc\ndef', fetchImpl });
+  const result = await client.postLink({ code: 'A' });
+  assert.equal(fetchImpl.calls.length, 0);
+  assert.equal(result.error, 'no bot key');
 });
 
 test('an HTML 502 from a restarting app does not throw on JSON parsing', async () => {

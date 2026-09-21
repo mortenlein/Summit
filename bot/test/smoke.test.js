@@ -10,16 +10,31 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const BOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ENTRY = path.join(BOT_DIR, 'index.js');
 
-// Fixed, high, and derived from this worktree's E2E_PORT (4105) so parallel agents do not collide.
-const PORT_NO_GATEWAY = 45105;
-const PORT_FAKE_TOKEN = 45106;
-const PORT_MISSING_ENV = 45107;
+/**
+ * Ask the OS for a free port rather than hardcoding one.
+ *
+ * These were fixed high ports. Two suite runs back to back could collide, because the previous
+ * run's SIGKILLed child has not always released its socket yet — and now that a bind failure is
+ * a named fatal (it used to hang forever), that collision surfaces as a confusing test failure
+ * about the wrong thing. Four other agents are also running specs on this box.
+ */
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.once('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address();
+      probe.close(() => resolve(port));
+    });
+  });
+}
 
 const FAKE_ENV = {
   DISCORD_BOT_TOKEN: 'MTIzNDU2Nzg5MDEyMzQ1Njc4.Xxxxxx.not-a-real-token-at-all',
@@ -65,6 +80,7 @@ const healthz = (port) => fetch(`http://127.0.0.1:${port}/healthz`).then(
 );
 
 test('boots, serves /healthz and /status, and exits 0 on SIGTERM', async () => {
+  const PORT_NO_GATEWAY = await freePort();
   const bot = startBot({ BOT_HEALTH_PORT: String(PORT_NO_GATEWAY), BOT_NO_GATEWAY: 'true' });
   try {
     const health = await waitFor(() => healthz(PORT_NO_GATEWAY));
@@ -80,6 +96,29 @@ test('boots, serves /healthz and /status, and exits 0 on SIGTERM', async () => {
     assert.deepEqual(status.commands, ['koble', 'stopp']);
     assert.equal(status.summitUrl, 'http://127.0.0.1:1');
     assert.ok(status.version, 'version should be read from package.json');
+
+    // --- /status may not overstate anything -------------------------------------------------
+    // `lastLinkOkAt` used to sit here, stamped by ANY 2xx from the app — including
+    // `{ok:false, reason:"unknown_code"}` and including an opt-out. The runbook told an
+    // organizer it meant "when a player last linked successfully". It did not. It is gone; the
+    // honest pair is `lastAppOkAt` (the app answered) and `lastLinkConfirmedAt` (a link
+    // actually happened, per the app).
+    assert.equal(status.lastLinkOkAt, undefined, 'lastLinkOkAt must not come back');
+    assert.equal(status.lastLinkConfirmedAt, null);
+    assert.equal(status.lastOptOutConfirmedAt, null);
+    assert.equal(status.lastAppOkAt, null);
+    assert.equal(status.appCalls, 0);
+    assert.deepEqual(status.interactions, {
+      koble: 0, kobleLinked: 0, stopp: 0, stoppConfirmed: 0, button: 0, failed: 0,
+    });
+    // Never connected, so we have not heard from Discord and must not claim its commands are
+    // in place — `null` is "unknown", and it is the only true answer before ClientReady.
+    assert.equal(status.commandsRegistered, null);
+    assert.equal(status.commandsAction, null);
+
+    // The two inputs /healthz bounds `reconnecting` by, so the endpoints cannot disagree.
+    assert.ok(Date.parse(status.stateSince), 'stateSince should be an ISO timestamp');
+    assert.equal(status.reconnectGraceMs, 300000);
 
     // No secret anywhere in /status or in the logs.
     const statusText = JSON.stringify(status);
@@ -108,11 +147,13 @@ test('a fake token and an unreachable Discord do not produce a crash loop', asyn
   //   no network  → recoverable, logged, retried with backoff, process stays up
   //   network     → Discord 401s the junk token → unrecoverable, but the process waits before
   //                 exiting so `restart: unless-stopped` cannot burn the IDENTIFY budget.
+  const PORT_FAKE_TOKEN = await freePort();
   const bot = startBot({
     BOT_HEALTH_PORT: String(PORT_FAKE_TOKEN),
     BOT_FATAL_EXIT_DELAY_MS: '3000', // 30s in production; shortened so the test is not slow
   });
   try {
+    assert.ok(!/Could not bind the health port/.test(bot.output), bot.output);
     const classified = await waitFor(
       () => (/Gateway connect failed — retrying in|FATAL: Discord rejected the credentials/.test(bot.output)
         ? bot.output
@@ -144,6 +185,7 @@ test('a fake token and an unreachable Discord do not produce a crash loop', asyn
 });
 
 test('a missing required env var is named in the log, and exit is delayed', async () => {
+  const PORT_MISSING_ENV = await freePort();
   const bot = startBot({
     BOT_HEALTH_PORT: String(PORT_MISSING_ENV),
     BOT_FATAL_EXIT_DELAY_MS: '2000',

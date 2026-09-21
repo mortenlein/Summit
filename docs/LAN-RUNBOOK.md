@@ -415,9 +415,28 @@ docker logs --tail 20 summit-bot              # want: a READY line naming the gu
 docker exec summit-bot wget -qO- http://127.0.0.1:4002/status   # the full picture, as JSON
 ```
 
-`/status` tells you the state (`ready`, `reconnecting`, `starting`, `fatal`), which commands
-are registered, when a player last linked successfully, and the last error. It holds no
-passwords, so it is safe to paste into a chat when asking for help.
+Three signals, in the order you should trust them:
+
+| Signal | Means |
+|---|---|
+| `(healthy)` in `docker ps` | The process is alive **and** on the Discord gateway. A brief reconnect stays healthy; a reconnect still going after 5 minutes flips it to `(unhealthy)`, on purpose — at that point nobody can link and you should be told. |
+| a `READY as …` line in the log | It reached Discord and named the guild. If the line says `commands NOT CONFIRMED`, Discord did not answer the registration call: `/koble` may be missing or stale in the server, and a `docker compose -f docker-compose.prod.yml restart summit-bot` retries it. |
+| `/status` | Everything else, as JSON. Holds no passwords — safe to paste into a chat when asking for help. |
+
+The fields on `/status` that people misread, so read these carefully:
+
+| Field | What it actually means |
+|---|---|
+| `state` | `ready`, `reconnecting`, `starting` or `fatal`. `stateSince` is when it entered that state. |
+| `commandsRegistered` | `true` only when Discord confirmed it. **`null` means "we don't know"** — never read it as yes. |
+| `lastAppOkAt` | The last time the **site** answered the bot at all. It is not a link. A kid mistyping a code stamps this field. |
+| `lastLinkConfirmedAt` | The last time a player actually got linked, as confirmed by the site. **This is the one that means someone linked.** |
+| `interactions.koble` vs `interactions.kobleLinked` | How many `/koble` were *run* vs how many *worked*. A big gap means kids are pasting expired codes. |
+| `lastError` | The last thing that went wrong, bot-side or site-side. Normal to be non-null after a site rebuild. |
+
+Nothing here tells you a player *read* anything. It cannot: Discord does not report that, and
+nothing in Summit claims it. Whether a DM was accepted by Discord is the site's reach panel and
+the marshal board, not the bot.
 
 **The bot is down / keeps restarting. What breaks?**
 
@@ -432,12 +451,15 @@ docker logs --tail 50 summit-bot     # the first error line says what is wrong, 
 docker compose -f docker-compose.prod.yml restart summit-bot
 ```
 
-The three usual causes, all named explicitly in the log: a missing line in `.env.bot`
+The four usual causes, all named explicitly in the log: a missing line in `.env.bot`
 ("Missing required environment variables: …"), a bad token ("Discord rejected the
-credentials"), or Discord being unreachable ("Gateway connect failed — retrying in 5s"). The
-bot waits 30 seconds before exiting on a fatal error on purpose — restarting faster would make
-Discord block the token for the rest of the day — so give it a minute before concluding it is
-stuck in a loop.
+credentials"), Discord being unreachable ("Gateway connect failed — retrying in 5s"), or the
+health port already taken ("Could not bind the health port …"). The bot waits 30 seconds before
+exiting on a fatal error on purpose — restarting faster would make Discord block the token for
+the rest of the day — so give it a minute before concluding it is stuck in a loop.
+
+A restart is always safe. The bot holds no state and no database: it has no `./data` mount at
+all. Restarting it cannot lose a link, a match, a score or a DM.
 
 **Nobody is getting DMs, but the channel posts fine.** That is a different system: the channel
 and the DMs are both sent by the *site*, not the bot. Check, in order: is `DISCORD_DM_ENABLED`

@@ -19,6 +19,19 @@ function intOr(value, fallback) {
 }
 
 /**
+ * Trim every secret and id.
+ *
+ * `.env.bot` is written by hand at 01:00 by someone pasting from the Discord Developer Portal,
+ * and a pasted value routinely carries a trailing space or newline. Untrimmed, `SUMMIT_BOT_KEY`
+ * becomes the header `Bearer abc\n`, which Node's fetch rejects as an invalid header value —
+ * so every `/koble` dies inside the client with an opaque TypeError and the kid is told Summit
+ * is down. Untrimmed, `DISCORD_BOT_TOKEN` is simply "invalid token".
+ */
+function str(value) {
+  return String(value ?? '').trim();
+}
+
+/**
  * @param {Record<string, string | undefined>} env
  * @returns {{ config: object, missing: string[] }}
  */
@@ -29,11 +42,11 @@ export function readConfig(env = process.env) {
   const rawUrl = env.SUMMIT_API_URL || env.SUMMIT_URL || DEFAULT_SUMMIT_URL;
 
   const config = {
-    token: env.DISCORD_BOT_TOKEN || '',
-    clientId: env.DISCORD_CLIENT_ID || '',
-    guildId: env.DISCORD_GUILD_ID || '',
-    botKey: env.SUMMIT_BOT_KEY || '',
-    summitUrl: String(rawUrl).replace(/\/+$/, ''),
+    token: str(env.DISCORD_BOT_TOKEN),
+    clientId: str(env.DISCORD_CLIENT_ID),
+    guildId: str(env.DISCORD_GUILD_ID),
+    botKey: str(env.SUMMIT_BOT_KEY),
+    summitUrl: str(rawUrl).replace(/\/+$/, ''),
     requestTimeoutMs: intOr(env.SUMMIT_TIMEOUT_MS, DEFAULT_TIMEOUT_MS),
     // Bound to 0.0.0.0 on purpose: a loopback-only listener passes the container HEALTHCHECK
     // while every other reader fails, which is the exact 01:00 confusion to avoid.
@@ -42,8 +55,13 @@ export function readConfig(env = process.env) {
     // How long to stay alive after an unrecoverable error, so `restart: unless-stopped`
     // cannot burn Discord's 1000 IDENTIFY/day in a tight crash loop.
     fatalExitDelayMs: intOr(env.BOT_FATAL_EXIT_DELAY_MS, 30000),
+    // How long a *gateway* disconnect may keep reporting /healthz as live. discord.js
+    // reconnects on its own and a blip must not flip the container unhealthy — but a bot that
+    // has been "reconnecting" for ten minutes is not doing its job, and a health endpoint that
+    // says `ok` forever while nobody can link is the same lie this feature exists to prevent.
+    reconnectGraceMs: intOr(env.BOT_RECONNECT_GRACE_MS, 300000),
     // Set by the smoke test: build everything, never open a gateway socket.
-    noGateway: env.BOT_NO_GATEWAY === 'true',
+    noGateway: str(env.BOT_NO_GATEWAY) === 'true',
   };
 
   const missing = REQUIRED.filter((key) => !String(env[key] || '').trim());

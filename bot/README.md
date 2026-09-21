@@ -81,14 +81,30 @@ DISCORD_BOT_TOKEN=... DISCORD_CLIENT_ID=... DISCORD_GUILD_ID=... SUMMIT_BOT_KEY=
 Two endpoints on `BOT_HEALTH_PORT` (4002), bound to `0.0.0.0` inside the container. Neither is
 published to the host and neither is tunnelled.
 
-- **`GET /healthz`** — liveness only: 200 while the gateway is `ready` or `reconnecting`, 503
-  while `starting` or `fatal`. This is what the container HEALTHCHECK probes. It deliberately
-  does **not** check whether the app is reachable: if it did, every `up -d --build summit`
-  would flip the bot unhealthy and server-vakt would push an ntfy alert about it, teaching the
-  organizer to swipe Summit alerts away in the week before the LAN.
-- **`GET /status`** — JSON: state, bot tag, guild, which commands are registered and whether
-  the last boot had to write them, uptime, version, `lastLinkOkAt`, `lastError`, interaction
-  counters. No token, no bearer key, no link codes.
+- **`GET /healthz`** — liveness only: 200 while the gateway is `ready`, or `reconnecting` for
+  less than `BOT_RECONNECT_GRACE_MS` (default 5 min); 503 otherwise. This is what the container
+  HEALTHCHECK probes. It deliberately does **not** check whether the app is reachable: if it
+  did, every `up -d --build summit` would flip the bot unhealthy and server-vakt would push an
+  ntfy alert about it, teaching the organizer to swipe Summit alerts away in the week before
+  the LAN. The grace window is bounded for the opposite reason: a reconnect that has been
+  running for ten minutes means nobody can link, and a health endpoint that answers `ok`
+  forever in that state is a lie of exactly the kind §9 of the spec exists to prevent.
+- **`GET /status`** — JSON. No token, no bearer key, no link codes. Every field is a claim
+  about something that actually happened:
+
+  | field | claim |
+  |---|---|
+  | `state` / `stateSince` | gateway state and when it started |
+  | `commandsRegistered` | `true` only when **Discord confirmed it**. `null` = unknown. Never `false`-by-assumption, because Discord may still hold a working copy from an earlier boot |
+  | `lastAppOkAt` | the app **answered**. Not a link — an unknown-code reply stamps this too |
+  | `lastLinkConfirmedAt` | the app said a link **happened**. This is the one that means someone linked |
+  | `interactions.koble` / `.kobleLinked` | run vs. worked, counted separately |
+  | `interactions.stopp` / `.button` / `.stoppConfirmed` | opt-outs asked for vs. confirmed |
+  | `lastError` | last failure, bot- or app-side, redacted |
+
+  There was a `lastLinkOkAt` here once, stamped by any 2xx from the app. The runbook told an
+  organizer it meant "when a player last linked successfully"; it meant "the app was up". It is
+  gone, and `bot/test/smoke.test.js` fails if it returns.
 
 ## Things that are the way they are on purpose
 
