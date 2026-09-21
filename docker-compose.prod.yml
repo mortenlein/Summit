@@ -60,7 +60,13 @@ services:
       NODE_ENV: production
       TZ: Europe/Oslo
     # No `ports:`. /healthz is for the container HEALTHCHECK and for `summit` on this network;
-    # nothing about the bot is reachable from the host or the tunnel.
+    # nothing about the bot is reachable from the host or the tunnel. Reach it for debugging
+    # with `docker exec summit-bot wget -qO- http://127.0.0.1:4002/status`.
+    #
+    # No `networks:` either, deliberately: this service is in the same compose project as
+    # `summit`, so both land on the project's existing default bridge and the bot reaches the
+    # app as `http://summit:4001`. Do NOT declare a new network — ash's default address pools
+    # have run out before, which is why three other apps on this host run `network_mode: bridge`.
     depends_on:
       # Start order only — never `condition: service_healthy`. The bot is useful the moment
       # Discord accepts it, and a kid running /koble while the app restarts gets a "Summit

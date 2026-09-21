@@ -29,7 +29,8 @@ import { COMMANDS, needsRegistration, OPTOUT_BUTTON_ID } from './src/commands.js
 import { createSummitClient } from './src/summit-client.js';
 import { createHealthServer } from './src/health.js';
 import { handleKoble, handleStopp, isOptOutButton } from './src/interactions.js';
-import logger from './src/log.js';
+import { commandListMessage, unreachableMessage } from './src/fallback.js';
+import logger, { redact } from './src/log.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const VERSION = (() => {
@@ -43,18 +44,43 @@ const VERSION = (() => {
 const { config, missing } = readConfig();
 const startedAt = Date.now();
 
-/** Everything /status reports. No token, no bearer key, no link codes — ever. */
+/**
+ * Everything /status reports. No token, no bearer key, no link codes — ever.
+ *
+ * Read this the way the spec's §9 asks the UI to be read: every field here must be true of
+ * something that actually happened. Nothing may be named so that a tired organizer infers a
+ * success the bot cannot vouch for. That is why there is no `lastLinkOkAt` — see below.
+ */
 const state = {
   state: 'starting', // starting | ready | reconnecting | fatal
+  stateSince: new Date().toISOString(),
   botTag: null,
   guildId: config.guildId || null,
+  /** The commands this build WANTS. Whether Discord has them is `commandsRegistered`. */
   commands: COMMANDS.map((c) => c.name),
   commandsAction: null, // up-to-date | updated | failed
+  /** true / false / null for "we never got an answer out of Discord". Never assumed. */
+  commandsRegistered: null,
   commandsAt: null,
   gatewayAttempts: 0,
   lastGatewayError: null,
-  interactions: { koble: 0, stopp: 0, button: 0, failed: 0 },
+  /**
+   * Attempts, and — separately — the ones the app confirmed. A single `koble` counter is the
+   * observability version of claiming a player was notified: it counts a kid mistyping a code
+   * exactly the same as a kid who is now linked.
+   */
+  interactions: { koble: 0, kobleLinked: 0, stopp: 0, stoppConfirmed: 0, button: 0, failed: 0 },
+  /** Set ONLY when the app answered ok:true for a real link. */
+  lastLinkConfirmedAt: null,
+  lastOptOutConfirmedAt: null,
 };
+
+/** Move to a new gateway state and remember when — /healthz bounds `reconnecting` by it. */
+function setState(next) {
+  if (state.state === next) return;
+  state.state = next;
+  state.stateSince = new Date().toISOString();
+}
 
 const summit = createSummitClient({
   baseUrl: config.summitUrl,
@@ -69,8 +95,18 @@ function statusPayload() {
     startedAt: new Date(startedAt).toISOString(),
     uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
     summitUrl: config.summitUrl,
-    lastLinkOkAt: summit.stats.lastOkAt ? new Date(summit.stats.lastOkAt).toISOString() : null,
-    lastError: summit.stats.lastError ?? state.lastGatewayError ?? null,
+    reconnectGraceMs: config.reconnectGraceMs,
+    // The last time the APP ANSWERED at all. It was called `lastLinkOkAt`, which was a false
+    // claim in the exact style this feature exists to prevent: it was stamped by any 2xx,
+    // including `{ok:false, reason:"unknown_code"}` and including an opt-out. An organizer
+    // reading "a player last linked successfully at 01:12" was reading "the app was up at
+    // 01:12". `lastLinkConfirmedAt` above is the honest field, and it is set only when the
+    // app said the link happened.
+    lastAppOkAt: summit.stats.lastOkAt ? new Date(summit.stats.lastOkAt).toISOString() : null,
+    appCalls: summit.stats.calls,
+    // Redacted defensively: these strings come from discord.js and from fetch, and the point
+    // of /status is that it can be pasted into a chat when asking for help.
+    lastError: redact(summit.stats.lastError ?? state.lastGatewayError ?? '') || null,
   };
 }
 
@@ -85,7 +121,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * day, i.e. for the LAN.
  */
 async function fatal(message, fields) {
-  state.state = 'fatal';
+  setState('fatal');
   state.lastGatewayError = message;
   logger.error(`FATAL: ${message}`, fields);
   logger.error(
@@ -115,6 +151,7 @@ async function registerCommands(rest) {
     const existing = await rest.get(route);
     if (!needsRegistration(existing, COMMANDS)) {
       state.commandsAction = 'up-to-date';
+      state.commandsRegistered = true;
       state.commandsAt = new Date().toISOString();
       logger.info('Commands already registered, unchanged — no write.', {
         guild: config.guildId,
@@ -124,6 +161,7 @@ async function registerCommands(rest) {
     }
     await rest.put(route, { body: COMMANDS });
     state.commandsAction = 'updated';
+    state.commandsRegistered = true;
     state.commandsAt = new Date().toISOString();
     logger.info('Commands registered (guild-scoped, instant).', {
       guild: config.guildId,
@@ -133,6 +171,10 @@ async function registerCommands(rest) {
     // Recoverable: the gateway connection is up, existing commands still work, and the next
     // restart retries. Never exit over this.
     state.commandsAction = 'failed';
+    // NOT `false`: Discord may well still hold a working copy from a previous boot. `null` is
+    // "we do not know", which is the only thing that is true here. Nothing downstream may read
+    // this as "registered".
+    state.commandsRegistered = null;
     state.lastGatewayError = `command registration: ${String(error?.message || error)}`;
     logger.error('Command registration failed — existing commands (if any) still work.', {
       guild: config.guildId,
@@ -170,6 +212,10 @@ async function onInteraction(interaction) {
           summit,
         );
         state.interactions.koble += 1;
+        if (result.ok) {
+          state.interactions.kobleLinked += 1;
+          state.lastLinkConfirmedAt = new Date().toISOString();
+        }
         await interaction.editReply({ content: result.content, allowedMentions: { parse: [] } });
         logger.info('/koble', {
           discordId: interaction.user.id,
@@ -189,6 +235,10 @@ async function onInteraction(interaction) {
           summit,
         );
         state.interactions.stopp += 1;
+        if (result.ok) {
+          state.interactions.stoppConfirmed += 1;
+          state.lastOptOutConfirmedAt = new Date().toISOString();
+        }
         await interaction.editReply({ content: result.content, allowedMentions: { parse: [] } });
         logger.info('/stopp', {
           discordId: interaction.user.id,
@@ -199,9 +249,10 @@ async function onInteraction(interaction) {
         return;
       }
 
-      // A command we no longer serve, left over in a stale client. Say nothing clever.
+      // A command we no longer serve, left over in a stale client. Say nothing clever, and
+      // say nothing the app owns — see src/fallback.js for why this is the bot's to hold.
       await deferEphemeral(interaction);
-      await interaction.editReply({ content: '/koble · /stopp', allowedMentions: { parse: [] } });
+      await interaction.editReply({ content: commandListMessage(), allowedMentions: { parse: [] } });
       return;
     }
 
@@ -212,6 +263,10 @@ async function onInteraction(interaction) {
         summit,
       );
       state.interactions.button += 1;
+      if (result.ok) {
+        state.interactions.stoppConfirmed += 1;
+        state.lastOptOutConfirmedAt = new Date().toISOString();
+      }
       await interaction.editReply({ content: result.content, allowedMentions: { parse: [] } });
       logger.info('stop-dm button', {
         discordId: interaction.user.id,
@@ -227,8 +282,10 @@ async function onInteraction(interaction) {
     logger.error('Interaction handler failed.', { message: String(error?.message || error) });
     try {
       if (interaction.isRepliable() && interaction.deferred && !interaction.replied) {
+        // Deliberately the "no answer" line and never a success line: we do not know what
+        // happened, and the one thing we must not do is tell a kid it worked.
         await interaction.editReply({
-          content: (await import('./src/fallback.js')).unreachableMessage(interaction.locale),
+          content: unreachableMessage(interaction.locale),
           allowedMentions: { parse: [] },
         });
       }
@@ -261,7 +318,7 @@ async function connectWithBackoff(client) {
         return;
       }
       const delay = delays[Math.min(attempt, delays.length - 1)];
-      state.state = 'reconnecting';
+      setState('reconnecting');
       state.lastGatewayError = String(error?.message || error);
       logger.warn(`Gateway connect failed — retrying in ${delay / 1000}s.`, {
         attempt: attempt + 1,
@@ -280,7 +337,19 @@ async function main() {
   });
 
   // Health first, so a bot that cannot start is still *observable* as not started.
-  const address = await health.listen(config.healthPort, config.healthHost);
+  let address;
+  try {
+    address = await health.listen(config.healthPort, config.healthHost);
+  } catch (error) {
+    // A taken port used to leave this await pending forever: no gateway, no further log
+    // lines, nothing to read but a failing HEALTHCHECK and a container that looks hung.
+    await fatal(
+      `Could not bind the health port ${config.healthHost}:${config.healthPort}. Another ` +
+        'process has it, or BOT_HEALTH_PORT is wrong in .env.bot.',
+      { message: String(error?.message || error) },
+    );
+    return;
+  }
   logger.info('Health server listening.', {
     address: `${config.healthHost}:${address?.port ?? config.healthPort}`,
     routes: '/healthz /status',
@@ -301,19 +370,20 @@ async function main() {
   });
 
   client.once(Events.ClientReady, async (c) => {
-    state.state = 'ready';
+    setState('ready');
     state.botTag = c.user.tag;
     const rest = new REST({ version: '10' }).setToken(config.token);
     await registerCommands(rest);
-    logger.info(
-      `READY as ${c.user.tag} · guild ${config.guildId} · commands ` +
-        `${state.commands.map((n) => `/${n}`).join(' ')} (${state.commandsAction}) · ` +
-        `app ${config.summitUrl}`,
-    );
+    // The runbook greps for READY. When registration failed we do not know whether the guild
+    // has the commands at all, so the line must not read as "/koble and /stopp are live".
+    const commandsPart = state.commandsRegistered === true
+      ? `commands ${state.commands.map((n) => `/${n}`).join(' ')} (${state.commandsAction})`
+      : 'commands NOT CONFIRMED (registration failed — /koble may be missing or stale)';
+    logger.info(`READY as ${c.user.tag} · guild ${config.guildId} · ${commandsPart} · app ${config.summitUrl}`);
   });
 
   client.on(Events.ShardDisconnect, (event, shardId) => {
-    state.state = 'reconnecting';
+    setState('reconnecting');
     state.lastGatewayError = `shard ${shardId} disconnected (${event?.code ?? '?'})`;
     logger.warn('Gateway disconnected — discord.js will reconnect.', {
       shard: shardId,
@@ -322,12 +392,12 @@ async function main() {
   });
 
   client.on(Events.ShardReconnecting, (shardId) => {
-    state.state = 'reconnecting';
+    setState('reconnecting');
     logger.warn('Gateway reconnecting.', { shard: shardId });
   });
 
   client.on(Events.ShardResume, (shardId) => {
-    state.state = 'ready';
+    setState('ready');
     logger.info('Gateway resumed.', { shard: shardId });
   });
 
@@ -356,6 +426,20 @@ async function main() {
   // An unhandled rejection anywhere must not take the bot down mid-LAN.
   process.on('unhandledRejection', (reason) => {
     logger.error('Unhandled rejection (ignored, staying up).', { message: String(reason) });
+  });
+
+  // An uncaught synchronous throw is different: the process state is no longer trustworthy, so
+  // swallowing it would leave a bot that answers /healthz while quietly doing nothing. Exit —
+  // but through fatal(), so `restart: unless-stopped` restarts it on a 30-second cadence rather
+  // than a 2-second one. A tight loop here burns Discord's 1000 IDENTIFY/day in ~35 minutes and
+  // 429s the token for the rest of the LAN.
+  process.on('uncaughtException', (error) => {
+    // Registering this handler suppresses Node's own stack dump, so print it ourselves —
+    // `docker logs summit-bot` is the only forensic record there is.
+    void fatal('Uncaught exception — restarting on a slow cadence.', {
+      message: String(error?.message || error),
+      stack: String(error?.stack || '').split('\n').slice(0, 5).join(' | '),
+    });
   });
 
   if (config.noGateway) {
