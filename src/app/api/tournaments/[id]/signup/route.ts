@@ -6,6 +6,25 @@ import { requireSignedInUser } from '@/lib/route-auth';
 import { recordAudit } from '@/lib/audit';
 import { codeForText } from '@/lib/api-errors';
 import { errorResponse } from '@/lib/mutation-guards';
+import { isDiscordLinkConfigured, linkDiscordByName } from '@/lib/discord-link';
+
+/**
+ * Bind the Discord name a player typed on the registration form.
+ *
+ * Deliberately best-effort and deliberately last. Registration is the thing that must succeed:
+ * a kid who mistypes their Discord name, or whose account this bot cannot see, is still on the
+ * roster and still gets called by a human. The result rides back on the response so the form
+ * can say what happened instead of pretending it worked.
+ */
+async function bindDiscordName(userId: string, name: string | null) {
+    if (!name || !isDiscordLinkConfigured()) return null;
+    try {
+        return await linkDiscordByName({ userId, name });
+    } catch (error) {
+        console.warn('[Signup] Discord name binding failed:', error);
+        return { ok: false, reason: 'lookup_failed' as const };
+    }
+}
 
 export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
     const params = await props.params;
@@ -45,6 +64,12 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
     // people on the floor; it stays editable afterwards via PATCH /api/me/player.
     const seating = typeof body?.seating === 'string' && body.seating.trim()
         ? body.seating.trim().slice(0, 16)
+        : null;
+
+    // Optional Discord name, typed in the same form. Resolved and bound AFTER the roster write
+    // below — a name Discord does not recognise must never cost a kid their registration.
+    const discordName = typeof body?.discordUsername === 'string' && body.discordUsername.trim()
+        ? body.discordUsername.trim().slice(0, 64)
         : null;
 
     const sessionSteamId = ((session.user as any)?.steamId as string | undefined)?.trim();
@@ -135,7 +160,7 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
                 actor: session.user.name || 'Signed-in player',
             });
 
-            return NextResponse.json(team);
+            return NextResponse.json({ ...team, discord: await bindDiscordName(user.id, discordName) });
         } else if (action === 'JOIN_TEAM') {
             const team = await prisma.$transaction(async (tx) => {
                 const existingPlayer = await tx.player.findFirst({
@@ -208,7 +233,7 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
                 actor: session.user.name || 'Signed-in player',
             });
 
-            return NextResponse.json(team);
+            return NextResponse.json({ ...team, discord: await bindDiscordName(user.id, discordName) });
         }
 
         return errorResponse('invalid_action', 400);

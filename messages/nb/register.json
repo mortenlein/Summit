@@ -58,5 +58,16 @@
   "errorLogoUpload": "Klarte ikke å laste opp logoen",
   "errorRegistration": "Påmeldingen gikk ikke gjennom",
   "errorJoin": "Klarte ikke å bli med på laget",
-  "errorMinPlayers": "{count, plural, one {Du må fylle inn minst # spiller} other {Du må fylle inn minst # spillere}}"
+  "errorMinPlayers": "{count, plural, one {Du må fylle inn minst # spiller} other {Du må fylle inn minst # spillere}}",
+  "discordOptional": "Discord-navn (valgfritt)",
+  "discordHint": "Da får du en melding på Discord når kampen din blir kalt opp.",
+  "discordPlaceholder": "f.eks. leo_6614",
+  "discordFoundTitle": "Koblet til Discord som {name}",
+  "discordFoundBody": "Du får en melding der når kampen din blir kalt opp.",
+  "discordBlockedTitle": "Fant deg, men får ikke sendt DM",
+  "discordBlockedBody": "Skru på direktemeldinger fra servermedlemmer i Discord-innstillingene. Crewet henter deg uansett.",
+  "discordNotFound": "Fant ingen med det navnet i Discord-serveren. Sjekk skrivemåten, eller bli med i serveren først. Du kan legge det til senere på Profil.",
+  "discordAmbiguous": "Flere i serveren heter noe sånt. Skriv hele Discord-navnet ditt, eller legg det til senere på Profil.",
+  "discordTaken": "Den Discord-kontoen er allerede koblet til en annen spiller. Si fra til crewet.",
+  "discordFailed": "Fikk ikke sjekket Discord-navnet nå. Du kan legge det til senere på Profil."
 }

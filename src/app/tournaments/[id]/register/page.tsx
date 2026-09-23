@@ -1,4 +1,5 @@
 import { getTournament } from '@/lib/api';
+import { isDiscordLinkConfigured } from '@/lib/discord-link';
 import RegisterClient from './RegisterClient';
 
 // The prefetched tournament is session-dependent (staff see the invite code and the bridge
@@ -21,5 +22,14 @@ export default async function RegisterPage(props: { params: Promise<{ id: string
     const params = await props.params;
     const tournament = await getTournament(params.id).catch(() => null);
 
-    return <RegisterClient params={props.params} initialTournament={tournament} />;
+    // Whether to offer the Discord field at all. Asking a kid for a name nothing will ever use
+    // is worse than not asking: they type it, nothing happens, and they believe they are
+    // reachable.
+    return (
+        <RegisterClient
+            params={props.params}
+            initialTournament={tournament}
+            discordConfigured={isDiscordLinkConfigured()}
+        />
+    );
 }

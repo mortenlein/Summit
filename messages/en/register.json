@@ -58,5 +58,16 @@
   "errorLogoUpload": "Logo upload failed",
   "errorRegistration": "Registration failed",
   "errorJoin": "Joining team failed",
-  "errorMinPlayers": "{count, plural, one {Minimum # player required} other {Minimum # players required}}"
+  "errorMinPlayers": "{count, plural, one {Minimum # player required} other {Minimum # players required}}",
+  "discordOptional": "Discord name (optional)",
+  "discordHint": "So you get a message on Discord when your match is called.",
+  "discordPlaceholder": "e.g. leo_6614",
+  "discordFoundTitle": "Linked to Discord as {name}",
+  "discordFoundBody": "You will get a message there when your match is called.",
+  "discordBlockedTitle": "Found you, but cannot DM you",
+  "discordBlockedBody": "Turn on direct messages from server members in your Discord settings. The crew comes for you either way.",
+  "discordNotFound": "Nobody in the Discord server has that name. Check the spelling, or join the server first. You can add it later on Profile.",
+  "discordAmbiguous": "Several people in the server have a similar name. Type your full Discord name, or add it later on Profile.",
+  "discordTaken": "That Discord account is already linked to another player. Tell the crew.",
+  "discordFailed": "Could not check that Discord name right now. You can add it later on Profile."
 }

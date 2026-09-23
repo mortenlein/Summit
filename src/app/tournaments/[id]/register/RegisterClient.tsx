@@ -32,6 +32,46 @@ import { getGameMetadata } from '@/lib/games';
 import { formatName } from '@/components/tournament/match-labels';
 
 /**
+ * The one-line verdict on a typed Discord name.
+ *
+ * Deliberately not a toast: a toast is gone before a 13-year-old has finished reading it, and
+ * three of these five outcomes need them to do something.
+ */
+function DiscordOutcome({ result }: { result: any }) {
+    const t = useTranslations('register');
+
+    if (result?.ok && result.dmState === 'BLOCKED') {
+        return (
+            <div className="mds-inline-notice border-l-warning text-sm">
+                <p className="m-0 font-semibold text-fg">{t('discordBlockedTitle')}</p>
+                <p className="m-0 mt-0.5 text-fg-muted">{t('discordBlockedBody')}</p>
+            </div>
+        );
+    }
+    if (result?.ok) {
+        return (
+            <div className="mds-inline-notice border-l-success text-sm">
+                <p className="m-0 font-semibold text-fg">
+                    {t('discordFoundTitle', { name: result.discordUsername })}
+                </p>
+                <p className="m-0 mt-0.5 text-fg-muted">{t('discordFoundBody')}</p>
+            </div>
+        );
+    }
+
+    const REASON: Record<string, string> = {
+        not_found: 'discordNotFound',
+        ambiguous: 'discordAmbiguous',
+        discord_taken: 'discordTaken',
+    };
+    return (
+        <div className="mds-inline-notice border-l-warning text-sm text-fg-muted">
+            {t(REASON[result?.reason] ?? 'discordFailed')}
+        </div>
+    );
+}
+
+/**
  * The shell every state of this page sits in: the tournament it is about, then one panel.
  *
  * `showMeta` is false on the branches where the kid already has a team. There their questions
@@ -118,6 +158,8 @@ function ErrorNotice({ message }: { message: string }) {
 export default function RegisterClient(props: {
     params: Promise<{ id: string }>;
     initialTournament?: any;
+    /** Whether this deployment can actually resolve and DM a Discord name. */
+    discordConfigured?: boolean;
 }) {
     const params = use(props.params);
     const t = useTranslations('register');
@@ -140,6 +182,11 @@ export default function RegisterClient(props: {
     const [copied, setCopied] = useState<'link' | 'code' | null>(null);
     // Optional LAN seat the player types while signing up, sent along with the signup POST.
     const [seating, setSeating] = useState('');
+    /** The Discord name the player types on this form. Resolved server-side against the club's
+     *  own server, so what we keep is the account, never the string. */
+    const [discordName, setDiscordName] = useState('');
+    /** What the server made of it, so the confirmation can say so instead of going quiet. */
+    const [discordResult, setDiscordResult] = useState<any>(null);
 
     const [teamData, setTeamData] = useState({
         name: '',
@@ -229,6 +276,7 @@ export default function RegisterClient(props: {
                         teamName: teamData.name,
                         logoUrl,
                         seating,
+                        discordUsername: discordName,
                     }),
                 });
 
@@ -238,6 +286,7 @@ export default function RegisterClient(props: {
                 }
                 const newTeam = await res.json();
                 setUserTeam(newTeam);
+                setDiscordResult(newTeam?.discord ?? null);
                 // Re-read the roster so the panel gets the isMe/inviteCode shape it renders from.
                 await loadMyTeam();
                 setSuccess(true);
@@ -273,7 +322,12 @@ export default function RegisterClient(props: {
             const res = await fetch(`/api/tournaments/${params.id}/signup`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'JOIN_TEAM', inviteCode, seating }),
+                body: JSON.stringify({
+                    action: 'JOIN_TEAM',
+                    inviteCode,
+                    seating,
+                    discordUsername: discordName,
+                }),
             });
 
             if (!res.ok) {
@@ -282,6 +336,7 @@ export default function RegisterClient(props: {
             }
             const joinedTeam = await res.json();
             setUserTeam(joinedTeam);
+            setDiscordResult(joinedTeam?.discord ?? null);
             // Re-read the roster so the panel gets the isMe/inviteCode shape it renders from.
             await loadMyTeam();
             setSuccess(true);
@@ -406,6 +461,11 @@ export default function RegisterClient(props: {
                         <CheckCircle2 className="shrink-0 text-success" size={22} />
                         <h1 className="mds-name-lg text-xl">{userTeam?.name || teamData.name}</h1>
                     </div>
+
+                    {/* What became of the Discord name they typed. Silence here is the one
+                        outcome that is not allowed: a kid who mistyped would walk away believing
+                        their phone will buzz. Every branch says what to do next. */}
+                    {discordResult && <DiscordOutcome result={discordResult} />}
 
                     {tournament.rosterLocked && (
                         <p className="mds-inline-notice flex items-center gap-2 border-l-warning text-sm text-fg-muted">
@@ -641,6 +701,26 @@ export default function RegisterClient(props: {
                         />
                     </div>
 
+                    {/* The Discord name, typed here rather than in a four-step dance across two
+                        applications. Summit resolves it against the club's own server and keeps
+                        the account, not the string, so a kid who renames themselves next week
+                        still gets called. Optional: the crew still fetches everyone. */}
+                    {props.discordConfigured && (
+                        <div className="max-w-[18rem]">
+                            <Input
+                                id="join-discord"
+                                label={t('discordOptional')}
+                                hint={t('discordHint')}
+                                type="text"
+                                value={discordName}
+                                maxLength={64}
+                                onChange={(e) => setDiscordName(e.target.value)}
+                                className="h-11 px-4 text-sm"
+                                placeholder={t('discordPlaceholder')}
+                            />
+                        </div>
+                    )}
+
                     {error && <ErrorNotice message={error} />}
 
                     <Button onClick={handleJoinTeam} disabled={submitting}>
@@ -694,6 +774,26 @@ export default function RegisterClient(props: {
                                 onChange={(e) => setSeating(e.target.value)}
                                 className="mds-numeric h-11 px-4 text-sm font-bold"
                                 placeholder={tPlayer('seat.placeholder')}
+                            />
+                        </div>
+                    )}
+
+                    {/* The Discord name, typed here rather than in a four-step dance across two
+                        applications. Summit resolves it against the club's own server and keeps
+                        the account, not the string, so a kid who renames themselves next week
+                        still gets called. Optional: the crew still fetches everyone. */}
+                    {props.discordConfigured && (
+                        <div className="max-w-[18rem]">
+                            <Input
+                                id="create-discord"
+                                label={t('discordOptional')}
+                                hint={t('discordHint')}
+                                type="text"
+                                value={discordName}
+                                maxLength={64}
+                                onChange={(e) => setDiscordName(e.target.value)}
+                                className="h-11 px-4 text-sm"
+                                placeholder={t('discordPlaceholder')}
                             />
                         </div>
                     )}
