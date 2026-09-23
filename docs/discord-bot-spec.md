@@ -185,8 +185,42 @@ SQLite treats NULLs as distinct in a unique index, so `LINK_PROBE` rows (`matchI
 Keep area 1's recommendation, but lead with the argument that survives review. The deciding property is **not** "a kid can't remember their Discord password" (asserted, not evidenced; on a phone an OAuth URL is usually deep-linked into the installed app and authorises in one tap). The deciding properties are:
 
 1. **The link and its deliverability are proven in the same gesture.** `/koble` ends inside Discord, so the probe DM's result is reported in the exact place the DM would have landed. We never hold a `discordId` we silently cannot reach.
-2. **Guild membership is proven for free.** A guild slash command can only be invoked by a member, and that is the precondition for DMing. No `GUILD_MEMBERS` privileged intent.
+2. **Guild membership is proven for free.** A guild slash command can only be invoked by a member, and that is the precondition for DMing. No `GUILD_MEMBERS` privileged intent. *(Still true of `/koble`. The typed-name path added on 2026-09-23 proves membership differently — the member search only ever returns people who are in the guild — and also needs no gateway intent. See the section below.)*
 3. **No token of any kind is stored.** We hold a public snowflake the user volunteered. That is a materially better answer to a parent than "we hold an OAuth credential for your child's Discord."
+
+### Linking by typed name — as shipped, 2026-09-23
+
+`/koble` is exact and proves the kid holds the account, and it remains. But it is four steps
+across two applications, and a roster of twelve 12-to-15-year-olds does not all finish it. The
+owner's call, and it is the right one: **the player types their Discord name into the
+registration form they are already filling in.**
+
+What makes that a real address rather than a note: Discord has no global user directory, but a
+bot that is in your server can search that server's own member list, and every player at this
+LAN is in 6614gamers. `GET /guilds/{id}/members/search` resolves the name to a snowflake, and
+the snowflake is what gets stored. Usernames change; snowflakes do not.
+
+An earlier draft of this document implied a typed name could never become a send address. That
+was wrong, and this section replaces it.
+
+  - `src/lib/discord-resolve.ts` does the lookup. It normalises what a kid actually types — a
+    pasted `@handle`, the legacy `name#1234` form still all over old guides, stray whitespace.
+  - An exact hit on username or server nickname wins. A single prefix hit is taken. **Anything
+    ambiguous is refused, never guessed** — picking one of two similar names sends one child's
+    match call to another child.
+  - `linkDiscordByName` then writes the same `DiscordLink`, runs the same probe DM, writes the
+    same `LINK_PROBE` attempt row and honours the same `/stopp` as the slash command. Nothing
+    downstream knows which path was used.
+  - A name that resolves to nobody **never costs a registration**. The roster write happens
+    first; the binding is best-effort and reports what happened so the form can say it.
+  - `DISCORD_GUILD_DIRECTORY` stands in for the member list in tests, the way
+    `DISCORD_DM_SIMULATE` stands in for the send. See `e2e/discord-username.spec.ts`.
+
+**Operational note.** The member-search endpoint is the light route and needs no privileged
+gateway intent. If it ever returns 403 for this application, turn on **Server Members Intent**
+in the Developer Portal; for a bot in a single guild that is a toggle with no approval process.
+The gateway connection itself still asks for `Guilds` only, so *"can the bot read my kid's
+messages"* still has a flat no as its answer.
 
 ### The flow
 

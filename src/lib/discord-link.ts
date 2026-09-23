@@ -145,6 +145,7 @@ export async function liveLinkCode(userId: string): Promise<IssuedCode | null> {
 export type { DmOutcome } from "@/lib/discord-dm";
 export { wasDmAttempted } from "@/lib/discord-dm";
 import { isDmEnabled, isDmIntercepted, sendDirectMessage, wasDmAttempted } from "@/lib/discord-dm";
+import { resolveGuildMemberByName } from "@/lib/discord-resolve";
 import type { DmOutcome } from "@/lib/discord-dm";
 
 export interface DmProbeRequest {
@@ -582,4 +583,114 @@ export async function unlinkUser(userId: string): Promise<{ removed: number }> {
     prisma.discordDmAttempt.deleteMany({ where: { userId } }),
   ]);
   return { removed: link.count };
+}
+
+// ---------------------------------------------------------------------------------------
+// Linking by typed name
+// ---------------------------------------------------------------------------------------
+
+export type NameLinkFailure =
+  | "not_configured"
+  | "empty"
+  | "not_found"
+  | "ambiguous"
+  | "lookup_failed"
+  | "discord_taken";
+
+export interface NameLinkResult {
+  ok: boolean;
+  reason?: NameLinkFailure;
+  /** The account we bound to, so the UI can show the kid who we found. */
+  discordUsername?: string;
+  /** On `ambiguous`, the names that matched — the caller asks which one. */
+  candidates?: { discordId: string; discordUsername: string; nickname: string | null }[];
+  /** UNKNOWN | SENT | BLOCKED, straight off the probe. */
+  dmState?: string;
+}
+
+/**
+ * Bind a Discord account to a Summit user from a name the player typed.
+ *
+ * This is the path a 13-year-old actually completes. `/koble` is exact and proves the kid holds
+ * the account, but it is four steps in two applications, and a roster of twelve will not all
+ * finish it. Typing a name into the form they are already filling in is one step.
+ *
+ * The name is resolved against the guild before anything is written, so what we store is the
+ * snowflake Discord gave us and never the string. A name that matches nobody, or more than one
+ * person, is refused rather than guessed at — guessing sends one child's match call to another
+ * child. Everything after the write is the `/koble` path exactly: same probe, same attempt row,
+ * same reach accounting, same `/stopp`.
+ */
+export async function linkDiscordByName(input: {
+  userId: string;
+  name: string;
+}): Promise<NameLinkResult> {
+  const resolved = await resolveGuildMemberByName(input.name);
+  if (!resolved.ok || !resolved.member) {
+    return {
+      ok: false,
+      reason: (resolved.reason ?? "lookup_failed") as NameLinkFailure,
+      candidates: resolved.candidates,
+    };
+  }
+
+  const { discordId, discordUsername } = resolved.member;
+  const locale = await userLocale(input.userId);
+
+  try {
+    await prisma.discordLink.upsert({
+      where: { userId: input.userId },
+      create: { userId: input.userId, discordId, discordUsername, dmState: "UNKNOWN" },
+      update: {
+        discordId,
+        discordUsername,
+        // A fresh binding proves nothing about deliverability, and a cached channel from a
+        // previous account is actively wrong. Typing a name again is an affirmative ask for
+        // DMs, so it clears an opt-out for the same reason re-running /koble does.
+        dmChannelId: null,
+        dmState: "UNKNOWN",
+        dmCheckedAt: null,
+        dmError: null,
+        optOut: false,
+      },
+    });
+  } catch (error: any) {
+    // `discordId @unique`: this account already belongs to another Summit user. Refused, never
+    // stolen — a silent steal means the first kid stops getting DMs with no signal anywhere.
+    if (error?.code === "P2002") return { ok: false, reason: "discord_taken" };
+    throw error;
+  }
+
+  const t = await getServerTranslations(locale, "discord");
+  const probe = await runProbe({ discordId, locale, body: t("dm.probe.body") }, input.userId);
+  const dmState = dmStateFor(probe.outcome);
+  const attempted = wasDmAttempted(probe.outcome);
+
+  await prisma.discordLink.updateMany({
+    where: { userId: input.userId, discordId },
+    data: {
+      dmState,
+      ...(attempted ? { dmCheckedAt: new Date() } : {}),
+      dmError:
+        probe.outcome === "SENT" || !attempted
+          ? null
+          : probe.error || String(probe.discordCode ?? probe.outcome),
+      ...(probe.dmChannelId !== undefined ? { dmChannelId: probe.dmChannelId } : {}),
+    },
+  });
+
+  if (!probe.rowWritten) {
+    await prisma.discordDmAttempt.create({
+      data: {
+        userId: input.userId,
+        discordId,
+        event: "LINK_PROBE",
+        outcome: probe.outcome,
+        discordCode: probe.discordCode ?? null,
+        locale,
+      },
+    });
+  }
+
+  return { ok: true, discordUsername, dmState };
 }

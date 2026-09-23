@@ -83,6 +83,10 @@ process.env.DISCORD_DM_LOG = path.resolve(process.cwd(), 'prisma', `e2e-${E2E_PO
 // the half of the DM sender most likely to be wrong and is otherwise unreachable without a real
 // token and a real kid with DMs switched off. Read fresh on every send; unset in production.
 process.env.DISCORD_DM_SIMULATE = path.resolve(process.cwd(), 'prisma', `e2e-${E2E_PORT}-dm-sim.json`);
+// The guild's member list, for the half of Discord linking that turns a typed name into an
+// account. No test run has a Discord server, so without this the "nobody has that name" and
+// "several people do" branches are unreachable — and those are the two a kid will actually hit.
+process.env.DISCORD_GUILD_DIRECTORY = path.resolve(process.cwd(), 'prisma', `e2e-${E2E_PORT}-guild.json`);
 
 export default defineConfig({
   testDir: './e2e',
