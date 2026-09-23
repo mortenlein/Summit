@@ -69,4 +69,6 @@ lan_stress.md
 .claude/worktrees/
 
 # e2e Discord DM failure-simulation control file (playwright.config.ts)
-prisma/e2e-*-dm-sim.json
+# Every per-port e2e scratch file: the SQLite database, the DM log, and the three stand-ins
+# that let a run with no Discord server exercise the send, the announce and the member lookup.
+prisma/e2e-*
